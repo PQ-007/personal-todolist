@@ -1,0 +1,9 @@
+node_modules
+dist
+dev-dist
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+.netlify
+.DS_Store
