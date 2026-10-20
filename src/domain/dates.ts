@@ -23,6 +23,18 @@ export const addMin = (d: Date, n: number) => new Date(d.getTime() + n * 60000);
 export const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 /** Monday 00:00 of the week containing `d`. */
 export const mondayOf = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
+export const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
+/** `d` itself on a workday; the following Monday on a weekend. */
+export const nearestWorkday = (d: Date) => startOfDay(isWeekend(d) ? addDays(d, d.getDay() === 6 ? 2 : 1) : d);
+/** Moves `n` workdays forward (or back), skipping weekends. */
+export function stepWorkday(d: Date, n: number): Date {
+  let x = startOfDay(d);
+  for (let left = Math.abs(n); left > 0; ) {
+    x = addDays(x, Math.sign(n));
+    if (!isWeekend(x)) left--;
+  }
+  return x;
+}
 export const sameDay = (a: Date, b: Date) => ymd(a) === ymd(b);
 /** Calendar-day difference, safe across DST changes. */
 export const dayDiff = (a: Date, b: Date) =>

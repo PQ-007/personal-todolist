@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { addDays, mondayOf } from '../domain/dates';
+import { addDays, mondayOf, nearestWorkday, stepWorkday } from '../domain/dates';
 import type { NewTask, Task } from '../domain/types';
 import { createDemoStore } from '../data/demo/demoStore';
 import { clearToken, getToken, hasToken, restoreToken, signIn } from '../data/google/auth';
@@ -10,10 +10,11 @@ import { loadSettings, saveSettings, type Settings } from './settings';
 export type SyncState = '' | 'loading' | 'saving' | 'saved' | 'error';
 
 export interface PlannerState {
+  view: 'focus' | 'week';
+  /** The workday shown in the focus view. */
+  day: Date;
   week: Date;
   tasks: Task[];
-  query: string;
-  hideDone: boolean;
   needAuth: boolean;
   sync: SyncState;
   toast: { id: number; msg: string } | null;
@@ -43,11 +44,12 @@ export class Planner {
 
   constructor() {
     restoreToken();
+    const day = nearestWorkday(new Date());
     this.state = {
-      week: mondayOf(new Date()),
+      view: 'focus',
+      day,
+      week: mondayOf(day),
       tasks: [],
-      query: '',
-      hideDone: false,
       needAuth: false,
       sync: '',
       toast: null,
@@ -106,18 +108,22 @@ export class Planner {
     }
   }
 
-  setWeek(week: Date) {
-    this.set({ week: mondayOf(week) });
-    void this.refresh();
+  /** Shows `day` (moved to the next workday if it is a weekend), loading its week if needed. */
+  setDay(day: Date) {
+    const d = nearestWorkday(day);
+    const week = mondayOf(d);
+    const moved = week.getTime() !== this.state.week.getTime();
+    this.set({ day: d, week });
+    if (moved) void this.refresh();
+  }
+  shiftDay(n: number) {
+    this.setDay(stepWorkday(this.state.day, n));
   }
   shiftWeek(n: number) {
-    this.setWeek(addDays(this.state.week, 7 * n));
+    this.setDay(addDays(this.state.week, 7 * n));
   }
-  setQuery(query: string) {
-    this.set({ query });
-  }
-  setHideDone(hideDone: boolean) {
-    this.set({ hideDone });
+  setView(view: PlannerState['view']) {
+    this.set({ view });
   }
 
   /* ---------- auth & settings ---------- */

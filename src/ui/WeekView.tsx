@@ -9,7 +9,6 @@ import {
 } from 'react';
 import { colorOf } from '../domain/colors';
 import { addDays, addMin, hm, overlapsDay, pad, sameDay, startOfDay, ymd } from '../domain/dates';
-import { matchesQuery } from '../domain/filter';
 import { daySegments, layoutDay, type Placed, type TaskSegment } from '../domain/layout';
 import { countTasks, previewLines } from '../domain/markdown/tasks';
 import type { Task } from '../domain/types';
@@ -52,12 +51,12 @@ const resize = (t: Task, dMin: number) => {
 };
 
 export function WeekView({ onOpen, onCreate }: Props) {
-  const { week, tasks, query } = usePlanner();
+  const { week, tasks } = usePlanner();
   const now = useNow();
   const calRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragInfo | null>(null);
   const [drag, setDrag] = useState<DragView | null>(null);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
+  const days = Array.from({ length: 5 }, (_, i) => addDays(week, i));
   const today = startOfDay(now);
 
   useEffect(() => {
@@ -179,7 +178,7 @@ export function WeekView({ onOpen, onCreate }: Props) {
               <button
                 key={t.id}
                 type="button"
-                className={'chip' + (t.done ? ' done' : '') + (matchesQuery(t, query) ? '' : ' dim')}
+                className={'chip' + (t.done ? ' done' : '')}
                 style={{ '--c': colorOf(t.colorId) } as CSSProperties}
                 onClick={() => onOpen(t.id)}
               >
@@ -212,7 +211,6 @@ export function WeekView({ onOpen, onCreate }: Props) {
                 <Card
                   key={key}
                   seg={seg}
-                  dim={!matchesQuery(seg.task, query)}
                   drag={drag?.key === key ? drag : null}
                   onPointerDown={(e) => onPointerDown(e, seg, key)}
                   onPointerMove={onPointerMove}
@@ -232,7 +230,6 @@ export function WeekView({ onOpen, onCreate }: Props) {
 
 interface CardProps {
   seg: Placed<TaskSegment<Task>>;
-  dim: boolean;
   drag: DragView | null;
   onPointerDown: (e: PointerEvent<HTMLDivElement>) => void;
   onPointerMove: (e: PointerEvent<HTMLDivElement>) => void;
@@ -249,7 +246,7 @@ export function timeLabel(t: Task): string {
   return `${wd(t.start)} ${hm(t.start)} – ${wd(t.end)} ${hm(t.end)}`;
 }
 
-function Card({ seg, dim, drag, ...handlers }: CardProps) {
+function Card({ seg, drag, ...handlers }: CardProps) {
   const t = seg.task;
   const c = colorOf(t.colorId);
   const { t: total, d: doneCount } = countTasks(t.description);
@@ -273,7 +270,6 @@ function Card({ seg, dim, drag, ...handlers }: CardProps) {
         'card' +
         (short ? ' short' : '') +
         (t.done ? ' isdone' : '') +
-        (dim ? ' dim' : '') +
         (drag ? ' dragging' : '') +
         (seg.endsHere ? '' : ' clipped-end')
       }

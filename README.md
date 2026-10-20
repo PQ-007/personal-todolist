@@ -4,7 +4,7 @@ A personal weekly planner and to-do list that uses **Google Calendar as its data
 Every calendar event is a task; its description holds markdown notes with checklists.
 It installs on your phone as a PWA.
 
-- Week time grid (dark by default, light toggle) and a sidebar task list
+- Opens on a minimal focus view: just today's tasks (workdays only), with the next open task emphasized and a one-line add box. `←`/`→` step through workdays, `w` switches to the Mon–Fri week grid (dark by default, light toggle)
 - Cards preview the notes, show checklist progress (`3/5`) and a spine that fills as items are ticked
 - Click a card for rendered notes with live checkboxes, a markdown editor, color, done, dates, delete
 - Drag to move, drag the bottom edge to resize (15-minute snap), click an empty slot to create

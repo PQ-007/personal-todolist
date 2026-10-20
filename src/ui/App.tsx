@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { addMin } from '../domain/dates';
-import { planner } from '../state/planner';
+import { planner, usePlanner } from '../state/planner';
 import { loadTheme, saveTheme, type Theme } from '../state/settings';
 import { SettingsDialog } from './SettingsDialog';
-import { Sidebar } from './Sidebar';
 import { TaskModal, type ModalTarget } from './TaskModal';
 import { Toast } from './Toast';
+import { FocusView } from './FocusView';
 import { TopBar } from './TopBar';
 import { UpdatePrompt } from './UpdatePrompt';
 import { WeekView } from './WeekView';
@@ -19,6 +19,7 @@ const nextHour = () => {
 export function App() {
   const [modal, setModal] = useState<ModalTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { view } = usePlanner();
   const [theme, setTheme] = useState<Theme>(loadTheme);
 
   useEffect(() => {
@@ -38,9 +39,12 @@ export function App() {
       const t = e.target as Element | null;
       if (t?.closest('input,textarea,select,dialog,[contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) return;
       if (document.querySelector('dialog[open]')) return;
-      if (e.key === 'ArrowLeft') planner.shiftWeek(-1);
-      else if (e.key === 'ArrowRight') planner.shiftWeek(1);
-      else if (e.key === 't') planner.setWeek(new Date());
+      const { view } = planner.get();
+      const step = (n: number) => (view === 'focus' ? planner.shiftDay(n) : planner.shiftWeek(n));
+      if (e.key === 'ArrowLeft') step(-1);
+      else if (e.key === 'ArrowRight') step(1);
+      else if (e.key === 't') planner.setDay(new Date());
+      else if (e.key === 'w') planner.setView(view === 'focus' ? 'week' : 'focus');
       else if (e.key === 'n') {
         e.preventDefault();
         create();
@@ -52,14 +56,13 @@ export function App() {
 
   return (
     <div className="app">
-      <Sidebar onOpen={open} onSettings={() => setSettingsOpen(true)} />
       <main>
         <TopBar
           onNew={() => create()}
           onSettings={() => setSettingsOpen(true)}
           onToggleTheme={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
         />
-        <WeekView onOpen={open} onCreate={create} />
+        {view === 'focus' ? <FocusView onOpen={open} /> : <WeekView onOpen={open} onCreate={create} />}
       </main>
       {modal && <TaskModal key={JSON.stringify(modal)} target={modal} onClose={() => setModal(null)} />}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
