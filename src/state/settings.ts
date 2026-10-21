@@ -1,3 +1,5 @@
+import { isLabel, type LabelFilter } from '../domain/labels';
+
 export type Mode = 'demo' | 'google';
 
 export interface Settings {
@@ -10,6 +12,8 @@ export interface Settings {
 
 const CFG_KEY = 'planner_cfg';
 const THEME_KEY = 'planner_theme';
+const LANG_KEY = 'planner_lang';
+const FILTER_KEY = 'planner_filter';
 
 export const envClientId = (): string => (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() ?? '';
 
@@ -44,3 +48,19 @@ export const saveSettings = (s: Settings) => write(CFG_KEY, JSON.stringify(s));
 export type Theme = 'dark' | 'light';
 export const loadTheme = (): Theme => (read(THEME_KEY) === 'light' ? 'light' : 'dark');
 export const saveTheme = (t: Theme) => write(THEME_KEY, t);
+
+/** The saved language, else the browser's if supported, else the first of `supported`. */
+export function loadLang<L extends string>(supported: L[]): L {
+  const is = (x: string | null | undefined): x is L => !!x && (supported as string[]).includes(x);
+  const saved = read(LANG_KEY);
+  if (is(saved)) return saved;
+  const browser = globalThis.navigator?.languages?.map((l) => l.slice(0, 2)).find(is);
+  return browser ?? supported[0]!;
+}
+export const saveLang = (l: string) => write(LANG_KEY, l);
+
+export const loadFilter = (): LabelFilter => {
+  const f = read(FILTER_KEY);
+  return isLabel(f) ? f : 'all';
+};
+export const saveFilter = (f: LabelFilter) => write(FILTER_KEY, f);

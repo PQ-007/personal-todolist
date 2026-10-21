@@ -2,7 +2,8 @@ import type { NewTask, Task } from '../../domain/types';
 import type { TaskStore } from '../store';
 import { seedWeek } from './seed';
 
-const DEMO_KEY = 'planner_demo_v1';
+// Bumped when the sample data changes, so existing browsers pick up the new set.
+const DEMO_KEY = 'planner_demo_v2';
 
 /** Minimal key/value storage, so tests can swap out localStorage. */
 export interface KV {

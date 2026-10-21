@@ -1,4 +1,5 @@
 import type { Task } from '../domain/types';
+import { t } from '../i18n';
 import { planner } from '../state/planner';
 
 export function DoneButton({ task }: { task: Task }) {
@@ -6,7 +7,7 @@ export function DoneButton({ task }: { task: Task }) {
     <button
       type="button"
       className={'donebtn' + (task.done ? ' on' : '')}
-      aria-label={task.done ? `Mark “${task.title}” as not done` : `Mark “${task.title}” as done`}
+      aria-label={t(task.done ? 'done.unmark' : 'done.mark', { title: task.title })}
       aria-pressed={task.done}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {

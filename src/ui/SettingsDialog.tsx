@@ -1,11 +1,21 @@
 import { useState } from 'react';
 import { loadGis } from '../data/google/auth';
+import { LANGS, setLang, t, useLang, type Lang } from '../i18n';
 import { planner, usePlanner } from '../state/planner';
-import type { Mode } from '../state/settings';
+import type { Mode, Theme } from '../state/settings';
 import { Dialog } from './Dialog';
+import { Icon } from './Icon';
+import { Rich } from './Rich';
 
-export function SettingsDialog({ onClose }: { onClose: () => void }) {
+interface Props {
+  theme: Theme;
+  onTheme: (theme: Theme) => void;
+  onClose: () => void;
+}
+
+export function SettingsDialog({ theme, onTheme, onClose }: Props) {
   const { settings } = usePlanner();
+  const lang = useLang();
   const [mode, setMode] = useState<Mode>(settings.mode);
   const [clientId, setClientId] = useState(settings.clientId);
   const [calendarId, setCalendarId] = useState(settings.calendarId);
@@ -13,7 +23,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const save = () => {
     const cid = clientId.trim();
     if (mode === 'google' && !cid) {
-      planner.toast('Paste your OAuth client ID first.');
+      planner.toast(t('set.needClientId'));
       return;
     }
     onClose();
@@ -22,7 +32,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Dialog label="Settings" onRequestClose={onClose}>
+    <Dialog label={t('settings')} onRequestClose={onClose}>
       <form
         className="mwrap setform"
         onSubmit={(e) => {
@@ -31,15 +41,32 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         }}
       >
         <div className="mhead">
-          <h2 style={{ fontSize: 18, flex: 1, margin: 0 }}>Settings</h2>
-          <button type="button" className="x" aria-label="Close" onClick={onClose}>
-            ×
+          <h2 style={{ fontSize: 18, flex: 1, margin: 0 }}>{t('settings')}</h2>
+          <button type="button" className="x" aria-label={t('modal.close')} onClick={onClose}>
+            <Icon name="x" />
           </button>
         </div>
         <fieldset className="radio" style={{ border: 0, padding: 0, margin: 0 }}>
-          <legend className="sr-only">Data source</legend>
+          <legend className="setlegend">{t('set.appearance')}</legend>
+          {(['dark', 'light'] as const).map((th) => (
+            <label key={th}>
+              <input type="radio" name="theme" checked={theme === th} onChange={() => onTheme(th)} />{' '}
+              {t(th === 'dark' ? 'set.dark' : 'set.light')}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="radio" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="setlegend">{t('set.language')}</legend>
+          {(Object.keys(LANGS) as Lang[]).map((l) => (
+            <label key={l} lang={l}>
+              <input type="radio" name="lang" checked={lang === l} onChange={() => setLang(l)} /> {LANGS[l]}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="radio" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="setlegend">{t('set.source')}</legend>
           <label>
-            <input type="radio" name="mode" value="demo" checked={mode === 'demo'} onChange={() => setMode('demo')} /> Demo data
+            <input type="radio" name="mode" value="demo" checked={mode === 'demo'} onChange={() => setMode('demo')} /> {t('set.demo')}
           </label>
           <label>
             <input
@@ -53,11 +80,11 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 loadGis().catch(() => {});
               }}
             />{' '}
-            Google Calendar
+            {t('set.google')}
           </label>
         </fieldset>
         <label className="f">
-          OAuth client ID
+          {t('set.clientId')}
           <input
             type="text"
             placeholder="1234567890-abc.apps.googleusercontent.com"
@@ -68,7 +95,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           />
         </label>
         <label className="f">
-          Calendar ID
+          {t('set.calendarId')}
           <input
             type="text"
             placeholder="primary"
@@ -79,18 +106,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           />
         </label>
         <ol className="steps">
+          <li>{t('set.step1')}</li>
+          <li>{t('set.step2')}</li>
           <li>
-            In Google Cloud Console, create a project and enable the <b>Google Calendar API</b>.
-          </li>
-          <li>Set up the OAuth consent screen (External) and add your Google account as a test user.</li>
-          <li>
-            Create an <b>OAuth client ID</b> of type Web application and add this site’s address (
-            <code>{location.origin}</code>) under authorized JavaScript origins.
+            <Rich text={t('set.step3')} parts={{ origin: <code>{location.origin}</code> }} />
           </li>
           <li>
-            Paste the client ID above. For a dedicated task calendar, create a “Tasks” calendar in Google Calendar and
-            paste its ID from Calendar settings → Integrate calendar. Leave it as <code>primary</code> to use your main
-            calendar.
+            <Rich text={t('set.step4')} parts={{ primary: <code>primary</code> }} />
           </li>
         </ol>
         <div className="mfoot">
@@ -98,17 +120,17 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             type="button"
             className="btn danger ghost"
             onClick={() => {
-              if (confirm('Replace demo data with the sample week?')) planner.resetDemo();
+              if (confirm(t('set.resetConfirm'))) planner.resetDemo();
             }}
           >
-            Reset demo data
+            {t('set.reset')}
           </button>
           <span className="hint" />
           <button type="button" className="btn" onClick={onClose}>
-            Cancel
+            {t('modal.cancel')}
           </button>
           <button type="submit" className="btn primary">
-            Save
+            {t('modal.save')}
           </button>
         </div>
       </form>

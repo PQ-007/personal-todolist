@@ -4,11 +4,16 @@ A personal weekly planner and to-do list that uses **Google Calendar as its data
 Every calendar event is a task; its description holds markdown notes with checklists.
 It installs on your phone as a PWA.
 
-- Opens on a minimal focus view: just today's tasks (workdays only), with the next open task emphasized and a one-line add box. `←`/`→` step through workdays, `w` switches to the Mon–Fri week grid (dark by default, light toggle)
+- Day, workdays (Mon–Fri) and week time grids, like Google Calendar, with a sidebar that lists the selected day's tasks: the current task with its checklist, the rest of the day, and a quick-add box (`14:00 Review PR`, `9:30-11:00 Planning`, or just a title for an all-day task)
+- Shortcuts: `t` today, `d` day view, `x` workdays view, `w` week view, `←`/`→` (or `k`/`j`) previous/next, `n` quick add, `c` new task in the full editor
+- English, Mongolian and Japanese (Settings → Language; defaults to the browser language)
+- Work and Personal labels (stored in the event's private properties); the top bar filters to All, Work or Personal, and new tasks take the active filter's label
+- Clicking a task opens a large read view (when, label, checklist progress, live checkboxes) with edit, duplicate, copy and delete; `E` edits
 - Cards preview the notes, show checklist progress (`3/5`) and a spine that fills as items are ticked
 - Click a card for rendered notes with live checkboxes, a markdown editor, color, done, dates, delete
 - Drag to move, drag the bottom edge to resize (15-minute snap), click an empty slot to create
-- Search, “Hide finished”, keyboard shortcuts
+- “Copy last week” (week and workdays views) copies the previous week’s tasks into the week on screen, with fresh checklists, only for the labels being shown, skipping ones already there; Undo removes them
+- Right-click a task for quick actions: color, open, edit, done, Work/Personal, duplicate, move to the next day, copy, delete; right-click an empty slot to paste or create there. `Ctrl/⌘+C` copies the focused task, `Ctrl/⌘+V` pastes it on the selected day, `Delete` removes it (with Undo)
 - Demo mode (data in this browser only) so you can try it without Google
 
 ## Quick start

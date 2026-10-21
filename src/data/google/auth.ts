@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { AuthError } from '../store';
 
 /**
@@ -91,7 +92,7 @@ export function loadGis(): Promise<void> {
     s.onerror = () => {
       gisLoading = null;
       s.remove();
-      reject(new Error('Could not load Google sign-in. Check your connection.'));
+      reject(new Error(t('err.gisLoad')));
     };
     document.head.appendChild(s);
   });
@@ -100,7 +101,7 @@ export function loadGis(): Promise<void> {
 
 /** Opens Google's consent popup (or returns at once if consent was already given). */
 export async function signIn(clientId: string): Promise<void> {
-  if (!clientId) throw new Error('Add your OAuth client ID in Settings first.');
+  if (!clientId) throw new Error(t('err.noClientId'));
   await loadGis();
   const oauth2 = window.google!.accounts!.oauth2!;
   await new Promise<void>((resolve, reject) => {
@@ -108,12 +109,12 @@ export async function signIn(clientId: string): Promise<void> {
       client_id: clientId,
       scope: SCOPE,
       callback: (r) => {
-        if (r.error || !r.access_token) return reject(new Error(r.error_description || r.error || 'Sign-in failed.'));
+        if (r.error || !r.access_token) return reject(new Error(r.error_description || r.error || t('err.signIn')));
         setToken(r.access_token, Number(r.expires_in) || 3600);
         resolve();
       },
       error_callback: (e) =>
-        reject(new Error(e.type === 'popup_closed' ? 'The sign-in window was closed.' : e.message || e.type || 'Sign-in failed.')),
+        reject(new Error(e.type === 'popup_closed' ? t('err.popupClosed') : e.message || e.type || t('err.signIn'))),
     });
     client.requestAccessToken({ prompt: '' });
   });

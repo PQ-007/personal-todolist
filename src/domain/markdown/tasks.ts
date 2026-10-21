@@ -10,6 +10,17 @@ export function toggleTaskLine(md: string, idx: number): string {
   return lines.join('\n');
 }
 
+/** Unticks every checklist item (outside code fences), for a fresh copy of a task. */
+export function uncheckAll(md: string): string {
+  let fence = false;
+  return splitLines(md)
+    .map((ln) => {
+      if (FENCE.test(ln)) fence = !fence;
+      return fence ? ln : ln.replace(CHECKBOX, '$1[ ]');
+    })
+    .join('\n');
+}
+
 /** Counts checklist items (outside code fences): `t` total, `d` done. */
 export function countTasks(md: string): { t: number; d: number } {
   let t = 0;

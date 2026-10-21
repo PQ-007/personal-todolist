@@ -38,9 +38,9 @@ describe('when form', () => {
   });
 
   it('validates ranges', () => {
-    expect(validateRange({ allDay: false, start: new Date(2026, 9, 19, 10), end: new Date(2026, 9, 19, 9) })).toMatch(/after/);
+    expect(validateRange({ allDay: false, start: new Date(2026, 9, 19, 10), end: new Date(2026, 9, 19, 9) })).toBe('err.endBeforeStart');
     expect(validateRange({ allDay: false, start: new Date(2026, 9, 19, 23), end: new Date(2026, 9, 20, 1) })).toBeNull();
-    expect(validateRange({ allDay: false, start: new Date(NaN), end: new Date() })).toMatch(/valid/);
+    expect(validateRange({ allDay: false, start: new Date(NaN), end: new Date() })).toBe('err.badDate');
   });
 
   it('never lets an all-day end precede its start', () => {

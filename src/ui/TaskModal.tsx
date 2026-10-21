@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } f
 import { COLORS, COLOR_NAMES, DEFAULT_COLOR } from '../domain/colors';
 import { addMin } from '../domain/dates';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
+import { LABELS, type Label } from '../domain/labels';
 import type { Task } from '../domain/types';
 import {
   formFromTask,
@@ -12,18 +13,22 @@ import {
   validateRange,
   type WhenForm,
 } from '../domain/when';
+import { t as tr } from '../i18n';
 import { planner } from '../state/planner';
 import { Dialog } from './Dialog';
+import { Icon } from './Icon';
 import { isImeKey } from './ime';
 import { MarkdownEditor } from './MarkdownEditor';
 import { MarkdownView } from './MarkdownView';
+import { Rich } from './Rich';
 
-export type ModalTarget = { kind: 'edit'; id: string } | { kind: 'new'; start: Date };
+export type ModalTarget = { kind: 'view'; id: string } | { kind: 'edit'; id: string } | { kind: 'new'; start: Date; label?: Label };
 
 interface Draft {
   title: string;
   description: string;
   colorId: string;
+  label?: Label;
   done: boolean;
   when: WhenForm;
 }
@@ -34,7 +39,7 @@ function initial(target: ModalTarget): { task: Task | null; draft: Draft } {
     if (t) {
       return {
         task: t,
-        draft: { title: t.title, description: t.description, colorId: t.colorId, done: t.done, when: formFromTask(t) },
+        draft: { title: t.title, description: t.description, colorId: t.colorId, label: t.label, done: t.done, when: formFromTask(t) },
       };
     }
   }
@@ -45,6 +50,7 @@ function initial(target: ModalTarget): { task: Task | null; draft: Draft } {
       title: '',
       description: '',
       colorId: DEFAULT_COLOR,
+      label: target.kind === 'new' ? target.label : undefined,
       done: false,
       when: formFromTask({ start, end: addMin(start, 60), allDay: false }),
     },
@@ -54,7 +60,7 @@ function initial(target: ModalTarget): { task: Task | null; draft: Draft } {
 export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: () => void }) {
   const [{ task, draft: start }] = useState(() => initial(target));
   const [draft, setDraft] = useState<Draft>(start);
-  const [tab, setTab] = useState<'view' | 'edit'>(task ? 'view' : 'edit');
+  const [tab, setTab] = useState<'view' | 'edit'>('edit');
   const [dirty, setDirty] = useState(false);
   const [showEnd, setShowEnd] = useState(() => isMultiDay(start.when));
   const titleRef = useRef<HTMLInputElement>(null);
@@ -74,23 +80,23 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   };
 
   const requestClose = () => {
-    if (!dirty || confirm('Discard your changes?')) onClose();
+    if (!dirty || confirm(tr('modal.discard'))) onClose();
   };
 
   const save = () => {
     const title = draft.title.trim();
     if (!title) {
-      planner.toast('Add a title first.');
+      planner.toast(tr('modal.needTitle'));
       titleRef.current?.focus();
       return;
     }
     const range = rangeFromForm(draft.when);
     const err = validateRange(range);
     if (err) {
-      planner.toast(err);
+      planner.toast(tr(err));
       return;
     }
-    const fields = { title, description: draft.description, colorId: draft.colorId, done: draft.done, ...range };
+    const fields = { title, description: draft.description, colorId: draft.colorId, label: draft.label, done: draft.done, ...range };
     onClose();
     if (task) {
       const cur = planner.find(task.id) ?? task;
@@ -99,10 +105,9 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   };
 
   const remove = () => {
-    if (task && confirm('Delete this task?')) {
-      onClose();
-      void planner.remove(task.id);
-    }
+    if (!task) return;
+    onClose();
+    planner.deleteWithUndo(task.id);
   };
 
   const toggleLine = (line: number) => {
@@ -124,10 +129,10 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   const endVisible = showEnd || isMultiDay(w);
 
   return (
-    <Dialog label={isNew ? 'New task' : 'Task details'} onRequestClose={requestClose}>
+    <Dialog label={tr(isNew ? 'modal.new' : 'modal.details')} onRequestClose={requestClose}>
       <div className="mwrap" onKeyDown={onKeyDown}>
         <div className="mhead">
-          <div className="swatches" role="radiogroup" aria-label="Color">
+          <div className="swatches" role="radiogroup" aria-label={tr('modal.color')}>
             {Object.entries(COLORS).map(([k, c]) => (
               <button
                 key={k}
@@ -136,24 +141,24 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
                 aria-checked={k === draft.colorId}
                 className={'sw' + (k === draft.colorId ? ' on' : '')}
                 style={{ '--c': c } as CSSProperties}
-                aria-label={COLOR_NAMES[k]}
+                aria-label={tr(COLOR_NAMES[k]!)}
                 onClick={() => change({ colorId: k })}
               />
             ))}
           </div>
           <label className="donechk">
-            <input type="checkbox" checked={draft.done} onChange={(e) => change({ done: e.target.checked })} /> Done
+            <input type="checkbox" checked={draft.done} onChange={(e) => change({ done: e.target.checked })} /> {tr('modal.done')}
           </label>
-          <button type="button" className="x" aria-label="Close" onClick={requestClose}>
-            ×
+          <button type="button" className="x" aria-label={tr('modal.close')} onClick={requestClose}>
+            <Icon name="x" />
           </button>
         </div>
 
         <input
           ref={titleRef}
           className="mtitle"
-          placeholder="Task or event title"
-          aria-label="Title"
+          placeholder={tr('modal.titlePlaceholder')}
+          aria-label={tr('modal.title')}
           value={draft.title}
           autoComplete="off"
           onChange={(e) => change({ title: e.target.value })}
@@ -162,7 +167,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
         <div className="mwhen">
           <input
             type="date"
-            aria-label={endVisible ? 'Start date' : 'Date'}
+            aria-label={tr(endVisible ? 'modal.startDate' : 'modal.date')}
             value={w.startDate}
             onChange={(e) => changeWhen((f) => setStartDate(f, e.target.value))}
           />
@@ -170,7 +175,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
             <span className="timebox">
               <input
                 type="time"
-                aria-label="Start time"
+                aria-label={tr('modal.startTime')}
                 value={w.startTime}
                 onChange={(e) => changeWhen((f) => ({ ...f, startTime: e.target.value }))}
               />
@@ -179,10 +184,10 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
           )}
           {endVisible && (
             <span className="enddate">
-              {w.allDay && 'to'}
+              {w.allDay && tr('modal.to')}
               <input
                 type="date"
-                aria-label="End date"
+                aria-label={tr('modal.endDate')}
                 value={w.endDate}
                 min={w.startDate}
                 onChange={(e) => changeWhen((f) => ({ ...f, endDate: e.target.value }))}
@@ -193,7 +198,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
             <span className="timebox">
               <input
                 type="time"
-                aria-label="End time"
+                aria-label={tr('modal.endTime')}
                 value={w.endTime}
                 onChange={(e) => changeWhen((f) => ({ ...f, endTime: e.target.value }))}
               />
@@ -208,25 +213,32 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
                 setShowEnd(false);
               }}
             />{' '}
-            All day
+            {tr('modal.allDay')}
           </label>
           {!endVisible && (
             <button type="button" className="linkbtn" onClick={() => setShowEnd(true)}>
-              {w.allDay ? 'Several days' : 'Ends another day'}
+              {tr(w.allDay ? 'modal.severalDays' : 'modal.endsAnotherDay')}
             </button>
           )}
         </div>
 
+        <div className="mlabel" role="radiogroup" aria-label={tr('label.field')}>
+          {[undefined, ...LABELS].map((l) => (
+            <button
+              key={l ?? 'none'}
+              type="button"
+              role="radio"
+              aria-checked={draft.label === l}
+              className={'lblopt' + (l ? ' ' + l : '') + (draft.label === l ? ' on' : '')}
+              onClick={() => change({ label: l })}
+            >
+              {l && <Icon name={l} size={14} />}
+              {tr(l === 'work' ? 'label.work' : l === 'personal' ? 'label.personal' : 'label.none')}
+            </button>
+          ))}
+        </div>
+
         <div className="tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'view'}
-            className={'tab' + (tab === 'view' ? ' on' : '')}
-            onClick={() => setTab('view')}
-          >
-            Notes
-          </button>
           <button
             type="button"
             role="tab"
@@ -237,14 +249,23 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
               requestAnimationFrame(() => document.getElementById('m-desc')?.focus());
             }}
           >
-            Edit markdown
+            {tr('modal.editMarkdown')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'view'}
+            className={'tab' + (tab === 'view' ? ' on' : '')}
+            onClick={() => setTab('view')}
+          >
+            {tr('modal.notes')}
           </button>
           {t > 0 && (
-            <div className="prog" aria-label={`${d} of ${t} checklist items done`}>
+            <div className="prog" aria-label={tr('modal.checklistProgress', { done: d, total: t })}>
               <span>
                 <i style={{ width: `${Math.round((d / t) * 100)}%` }} />
               </span>
-              {d}/{t} done
+              {tr('modal.doneCount', { done: d, total: t })}
             </div>
           )}
         </div>
@@ -255,7 +276,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
               <MarkdownView source={draft.description} onToggle={toggleLine} />
             ) : (
               <p className="empty">
-                No notes yet. Open “Edit markdown” and type <code>- [ ] item</code> to add a checklist.
+                <Rich text={tr('modal.noNotes')} parts={{ code: <code>- [ ] item</code> }} />
               </p>
             )
           ) : (
@@ -266,15 +287,15 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
         <div className="mfoot">
           {!isNew && (
             <button type="button" className="btn danger ghost" onClick={remove}>
-              Delete
+              {tr('modal.delete')}
             </button>
           )}
-          <span className="hint">Ctrl/⌘ + Enter to save</span>
+          <span className="hint">{tr('modal.saveHint')}</span>
           <button type="button" className="btn" onClick={requestClose}>
-            Cancel
+            {tr('modal.cancel')}
           </button>
           <button type="button" className="btn primary" onClick={save}>
-            Save
+            {tr('modal.save')}
           </button>
         </div>
       </div>

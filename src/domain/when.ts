@@ -50,9 +50,9 @@ export function setAllDay(f: WhenForm, allDay: boolean): WhenForm {
 
 export const isMultiDay = (f: WhenForm) => f.endDate !== '' && f.endDate !== f.startDate;
 
-/** Returns an error message, or null when the range is valid. */
-export function validateRange(r: { start: Date; end: Date; allDay: boolean }): string | null {
-  if (Number.isNaN(r.start.getTime()) || Number.isNaN(r.end.getTime())) return 'Pick a valid date and time.';
-  if (!r.allDay && r.end <= r.start) return 'The end time must be after the start time.';
+/** Returns the message key of the problem, or null when the range is valid. */
+export function validateRange(r: { start: Date; end: Date; allDay: boolean }): 'err.badDate' | 'err.endBeforeStart' | null {
+  if (Number.isNaN(r.start.getTime()) || Number.isNaN(r.end.getTime())) return 'err.badDate';
+  if (!r.allDay && r.end <= r.start) return 'err.endBeforeStart';
   return null;
 }

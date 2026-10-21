@@ -123,7 +123,8 @@ export function parseMarkdown(md: string): Block[] {
 
 const LINK = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/;
 const AUTOLINK = /^https?:\/\/[^\s<)]+/;
-const WORD = /\w/;
+/** Letters, digits and _ in any script, so emphasis never starts or ends inside a word (日本語_text_ too). */
+const WORD = /[\p{L}\p{N}_]/u;
 
 /** Parses inline markdown: `code`, [links](https://…), bare URLs, **bold**, *em*, _em_, ~~del~~. */
 export function parseInline(s: string): Inline[] {
@@ -177,9 +178,9 @@ export function parseInline(s: string): Inline[] {
         continue;
       }
     }
-    if (ch === '_' && (prev === '' || !/[\w_]/.test(prev))) {
+    if (ch === '_' && (prev === '' || !WORD.test(prev))) {
       const j = s.indexOf('_', i + 1);
-      if (j > i + 1 && !/\s/.test(s[i + 1]!) && !/[\w_]/.test(s[j + 1] ?? '')) {
+      if (j > i + 1 && !/\s/.test(s[i + 1]!) && !WORD.test(s[j + 1] ?? '')) {
         push({ t: 'em', c: parseInline(s.slice(i + 1, j)) });
         i = j + 1;
         continue;

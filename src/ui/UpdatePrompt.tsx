@@ -1,4 +1,6 @@
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { t } from '../i18n';
+import { Icon } from './Icon';
 
 /** Offers to reload when a new version of the app has been downloaded. */
 export function UpdatePrompt() {
@@ -9,12 +11,12 @@ export function UpdatePrompt() {
   if (!needRefresh) return null;
   return (
     <div className="toast" role="status" style={{ bottom: 76 }}>
-      A new version is available.
+      {t('update.available')}
       <button type="button" className="btn primary" onClick={() => void updateServiceWorker(true)}>
-        Reload
+        {t('update.reload')}
       </button>
-      <button type="button" className="x" aria-label="Dismiss" onClick={() => setNeedRefresh(false)}>
-        ×
+      <button type="button" className="x" aria-label={t('toast.dismiss')} onClick={() => setNeedRefresh(false)}>
+        <Icon name="x" />
       </button>
     </div>
   );

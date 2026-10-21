@@ -1,6 +1,7 @@
 import { useRef, type KeyboardEvent } from 'react';
 import { isImeKey } from './ime';
 import { continueList, insertLinePrefix, wrapSelection, type Edit } from '../domain/editing';
+import { t } from '../i18n';
 
 interface Props {
   value: string;
@@ -44,27 +45,27 @@ export function MarkdownEditor({ value, onChange }: Props) {
 
   return (
     <>
-      <div className="toolbar" role="toolbar" aria-label="Formatting">
+      <div className="toolbar" role="toolbar" aria-label={t('md.toolbar')}>
         <button type="button" onClick={() => apply(insertLinePrefix(value, sel()[0], '- [ ] '))}>
-          ☐ Checklist
+          {t('md.checklist')}
         </button>
         <button type="button" onClick={() => apply(insertLinePrefix(value, sel()[0], '- '))}>
-          • Bullet
+          {t('md.bullet')}
         </button>
         <button type="button" onClick={() => apply(insertLinePrefix(value, sel()[0], '## '))}>
-          Heading
+          {t('md.heading')}
         </button>
         <button type="button" onClick={() => apply(wrapSelection(value, ...sel(), '**'))}>
-          Bold
+          {t('md.bold')}
         </button>
       </div>
       <textarea
         ref={ta}
         id="m-desc"
         className="desc"
-        aria-label="Notes in markdown"
+        aria-label={t('md.label')}
         spellCheck={false}
-        placeholder={'Notes in markdown\n\n## Steps\n- [ ] First thing\n- [ ] Second thing'}
+        placeholder={t('md.placeholder')}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}

@@ -1,4 +1,5 @@
 import type { NewTask, Task } from '../../domain/types';
+import { t } from '../../i18n';
 import { AuthError, ConflictError, type TaskStore } from '../store';
 import { fromGoogle, isUsable, patchBody, toGoogle, type GEvent } from './mapping';
 
@@ -26,7 +27,7 @@ export function createGoogleStore(opts: GoogleStoreOptions): TaskStore {
     if (r.status === 412) throw new ConflictError();
     if (r.status === 204) return null as T;
     const j = (await r.json().catch(() => null)) as { error?: { message?: string } } | null;
-    if (!r.ok) throw new Error(j?.error?.message || `Google Calendar error ${r.status}`);
+    if (!r.ok) throw new Error(j?.error?.message || t('err.google', { status: r.status }));
     return j as T;
   }
 

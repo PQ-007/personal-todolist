@@ -1,6 +1,7 @@
 import { parseYmd, ymd } from '../../domain/dates';
 import { DEFAULT_COLOR } from '../../domain/colors';
 import { normalizeDescription } from '../../domain/markdown/htmlToMd';
+import { isLabel } from '../../domain/labels';
 import type { NewTask, Task } from '../../domain/types';
 
 /** The subset of a Google Calendar event resource we use. */
@@ -25,7 +26,7 @@ export interface GEvent {
 export type GEventBody = Partial<Omit<GEvent, 'id' | 'etag' | 'status'>>;
 
 /** Private extended property keys this app owns. */
-const OWN_KEYS = ['done'] as const;
+const OWN_KEYS = ['done', 'label'] as const;
 
 export const isUsable = (g: GEvent) => g.status !== 'cancelled' && !!g.start && !!g.end;
 
@@ -33,6 +34,7 @@ export function fromGoogle(g: GEvent): Task {
   const allDay = !!g.start?.date;
   const priv = { ...(g.extendedProperties?.private ?? {}) };
   const done = priv.done === '1';
+  const label = priv.label;
   for (const k of OWN_KEYS) delete priv[k];
   return {
     id: g.id,
@@ -44,6 +46,7 @@ export function fromGoogle(g: GEvent): Task {
     description: normalizeDescription(g.description),
     colorId: g.colorId || DEFAULT_COLOR,
     done,
+    ...(isLabel(label) ? { label } : {}),
     ...(Object.keys(priv).length ? { extraProps: priv } : {}),
   };
 }
@@ -53,7 +56,8 @@ const timeOf = (allDay: boolean, d: Date): GEventTime => (allDay ? { date: ymd(d
 const timeSwitch = (allDay: boolean, d: Date): GEventTime =>
   allDay ? { date: ymd(d), dateTime: null } : { dateTime: d.toISOString(), date: null };
 
-const privateOf = (t: NewTask) => ({ ...(t.extraProps ?? {}), done: t.done ? '1' : '0' });
+/** An empty label clears it: a PATCH merges private properties, so a missing key would keep the old one. */
+const privateOf = (t: NewTask) => ({ ...(t.extraProps ?? {}), done: t.done ? '1' : '0', label: t.label ?? '' });
 
 /** Full body for creating an event. */
 export function toGoogle(t: NewTask): GEventBody {
@@ -85,7 +89,7 @@ export function patchBody(prev: Task, next: Task): GEventBody {
     b.start = time(next.allDay, next.start);
     b.end = time(next.allDay, next.end);
   }
-  if (next.done !== prev.done || JSON.stringify(next.extraProps ?? {}) !== JSON.stringify(prev.extraProps ?? {})) {
+  if (next.done !== prev.done || next.label !== prev.label || JSON.stringify(next.extraProps ?? {}) !== JSON.stringify(prev.extraProps ?? {})) {
     b.extendedProperties = { private: privateOf(next) };
   }
   return b;

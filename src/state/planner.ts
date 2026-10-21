@@ -1,23 +1,35 @@
 import { useSyncExternalStore } from 'react';
-import { addDays, mondayOf, nearestWorkday, stepWorkday } from '../domain/dates';
+import { copyOf, placeCopy, weekCopies } from '../domain/clipboard';
+import { addDays, mondayOf, startOfDay } from '../domain/dates';
 import type { NewTask, Task } from '../domain/types';
 import { createDemoStore } from '../data/demo/demoStore';
 import { clearToken, getToken, hasToken, restoreToken, signIn } from '../data/google/auth';
 import { createGoogleStore } from '../data/google/googleStore';
 import { AuthError, ConflictError, type TaskStore } from '../data/store';
-import { loadSettings, saveSettings, type Settings } from './settings';
+import { t as tr } from '../i18n';
+import { matchesFilter, type LabelFilter } from '../domain/labels';
+import { loadFilter, saveFilter, loadSettings, saveSettings, type Settings } from './settings';
 
 export type SyncState = '' | 'loading' | 'saving' | 'saved' | 'error';
 
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 export interface PlannerState {
-  view: 'focus' | 'week';
-  /** The workday shown in the focus view. */
+  view: 'day' | 'workweek' | 'week';
+  /** The selected day: the day view and the sidebar show it, the week views show its week. */
   day: Date;
   week: Date;
   tasks: Task[];
   needAuth: boolean;
   sync: SyncState;
-  toast: { id: number; msg: string } | null;
+  toast: { id: number; msg: string; action?: ToastAction } | null;
+  /** Which labels to show. */
+  filter: LabelFilter;
+  /** The task last copied, ready to paste. */
+  clipboard: NewTask | null;
   settings: Settings;
 }
 
@@ -40,19 +52,22 @@ export class Planner {
   private alias = new Map<string, string>();
   private pending = 0;
   private toastSeq = 0;
+  private tmpSeq = 0;
   private loadSeq = 0;
 
   constructor() {
     restoreToken();
-    const day = nearestWorkday(new Date());
+    const day = startOfDay(new Date());
     this.state = {
-      view: 'focus',
+      view: 'day',
       day,
       week: mondayOf(day),
       tasks: [],
       needAuth: false,
       sync: '',
       toast: null,
+      clipboard: null,
+      filter: loadFilter(),
       settings: loadSettings(),
     };
     this.store = this.makeStore();
@@ -75,8 +90,8 @@ export class Planner {
       : this.demo;
   }
 
-  toast(msg: string) {
-    this.set({ toast: { id: ++this.toastSeq, msg } });
+  toast(msg: string, action?: ToastAction) {
+    this.set({ toast: { id: ++this.toastSeq, msg, action } });
   }
   dismissToast() {
     this.set({ toast: null });
@@ -85,7 +100,7 @@ export class Planner {
   private fail(err: unknown) {
     if (err instanceof AuthError) this.set({ needAuth: true });
     this.set({ sync: 'error' });
-    this.toast(err instanceof Error ? err.message : 'Something went wrong.');
+    this.toast(err instanceof Error ? err.message : tr('err.generic'));
   }
 
   /* ---------- loading ---------- */
@@ -108,19 +123,23 @@ export class Planner {
     }
   }
 
-  /** Shows `day` (moved to the next workday if it is a weekend), loading its week if needed. */
+  /** Selects `day`, loading its week if needed. */
   setDay(day: Date) {
-    const d = nearestWorkday(day);
+    const d = startOfDay(day);
     const week = mondayOf(d);
     const moved = week.getTime() !== this.state.week.getTime();
     this.set({ day: d, week });
     if (moved) void this.refresh();
   }
   shiftDay(n: number) {
-    this.setDay(stepWorkday(this.state.day, n));
+    this.setDay(addDays(this.state.day, n));
   }
   shiftWeek(n: number) {
-    this.setDay(addDays(this.state.week, 7 * n));
+    this.setDay(addDays(this.state.day, 7 * n));
+  }
+  setFilter(filter: LabelFilter) {
+    saveFilter(filter);
+    this.set({ filter });
   }
   setView(view: PlannerState['view']) {
     this.set({ view });
@@ -133,7 +152,7 @@ export class Planner {
       await signIn(this.state.settings.clientId);
       await this.refresh();
     } catch (e) {
-      this.toast(e instanceof Error ? e.message : 'Sign-in failed.');
+      this.toast(e instanceof Error ? e.message : tr('err.signIn'));
     }
   }
 
@@ -148,7 +167,7 @@ export class Planner {
 
   resetDemo() {
     this.demo.reset();
-    this.toast('Demo data reset.');
+    this.toast(tr('set.demoReset'));
     if (this.state.settings.mode === 'demo') void this.refresh();
   }
 
@@ -181,9 +200,18 @@ export class Planner {
     this.set({ tasks: next ? tasks.map((t) => (t.id === id ? next : t)) : tasks });
   }
 
-  async create(input: NewTask): Promise<void> {
-    const tmpId = 'tmp-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  create(input: NewTask): Promise<void> {
+    return this.startCreate(input).done;
+  }
+
+  /** Shows the task at once under a temporary id and saves it in the background. */
+  private startCreate(input: NewTask): { id: string; done: Promise<void> } {
+    const tmpId = `tmp-${Date.now().toString(36)}-${++this.tmpSeq}`;
     this.set({ tasks: [...this.state.tasks, { ...input, id: tmpId }] });
+    return { id: tmpId, done: this.finishCreate(tmpId, input) };
+  }
+
+  private async finishCreate(tmpId: string, input: NewTask): Promise<void> {
     try {
       const { value: real, latest } = await this.enqueue(tmpId, async () => {
         const real = await this.store.create(input);
@@ -234,6 +262,75 @@ export class Planner {
       this.set({ tasks: [...this.state.tasks, this.server.get(rid) ?? { ...before, id: rid }] });
       this.fail(e);
     }
+  }
+
+  /** Deletes a task and offers to bring it back. */
+  deleteWithUndo(id: string) {
+    const t = this.find(id);
+    if (!t) return;
+    void this.remove(id);
+    this.toast(tr('toast.deleted', { title: t.title }), {
+      label: tr('toast.undo'),
+      run: () => void this.create({ ...copyOf(t), done: t.done, extraProps: t.extraProps }),
+    });
+  }
+
+  copy(id: string) {
+    const t = this.find(id);
+    if (!t) return;
+    this.set({ clipboard: copyOf(t) });
+    this.toast(tr('toast.copied', { title: t.title }));
+  }
+
+  /** Creates a copy at the same time. */
+  duplicate(id: string) {
+    const t = this.find(id);
+    if (t) void this.create(copyOf(t));
+  }
+
+  /** Moves a task by whole days, keeping its times. */
+  moveDays(id: string, n: number) {
+    const t = this.find(id);
+    if (t) void this.update({ ...t, start: addDays(t.start, n), end: addDays(t.end, n) });
+  }
+
+  /**
+   * Copies last week's tasks into the week on screen: its first `days` days (5 for the
+   * workdays view), only labels the filter shows, skipping tasks already there. Undo removes them.
+   */
+  async copyPreviousWeek(days: number) {
+    const { week, filter } = this.state;
+    const from = addDays(week, -7);
+    let source: Task[];
+    try {
+      source = await this.store.list(from, addDays(from, days));
+    } catch (e) {
+      this.fail(e);
+      return;
+    }
+    // The week on screen may have changed while last week was loading.
+    if (this.state.week.getTime() !== week.getTime()) return;
+    const copies = weekCopies(
+      source.filter((t) => matchesFilter(t, filter)),
+      this.state.tasks,
+      from,
+      days,
+    );
+    if (!copies.length) {
+      this.toast(tr('toast.weekNothing'));
+      return;
+    }
+    const ids = copies.map((c) => this.startCreate(c).id);
+    this.toast(tr('toast.weekCopied', { n: copies.length }), {
+      label: tr('toast.undo'),
+      run: () => ids.forEach((id) => void this.remove(id)),
+    });
+  }
+
+  /** Pastes the copied task on `day`, at `time` if given (see `placeCopy`). */
+  paste(day: Date, time?: Date) {
+    const c = this.state.clipboard;
+    if (c) void this.create(placeCopy(c, day, time));
   }
 
   patch(id: string, patch: Partial<Task>) {

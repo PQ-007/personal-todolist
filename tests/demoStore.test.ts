@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoStore, type KV } from '../src/data/demo/demoStore';
+import { seedWeek } from '../src/data/demo/seed';
 import { addDays, mondayOf } from '../src/domain/dates';
 
 const memKV = (): KV => {
   const m = new Map<string, string>();
   return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v), removeItem: (k) => void m.delete(k) };
+};
+
+/** Sample tasks overlapping the current week. */
+const inThisWeek = () => {
+  const mon = mondayOf(new Date());
+  return seedWeek().filter((t) => t.start < addDays(mon, 7) && t.end > mon).length;
 };
 
 describe('demo store', () => {
@@ -13,7 +20,7 @@ describe('demo store', () => {
     const s = createDemoStore(kv);
     const mon = mondayOf(new Date());
     const week = await s.list(mon, addDays(mon, 7));
-    expect(week.length).toBe(13);
+    expect(week.length).toBe(inThisWeek());
     const first = week[0]!;
     await s.update(first, { ...first, done: true });
     const created = await s.create({ ...first, title: 'New' });
@@ -33,6 +40,6 @@ describe('demo store', () => {
     const [a] = await s.list(mon, addDays(mon, 7));
     await s.remove(a!.id);
     s.reset();
-    expect((await s.list(mon, addDays(mon, 7))).length).toBe(13);
+    expect((await s.list(mon, addDays(mon, 7))).length).toBe(inThisWeek());
   });
 });

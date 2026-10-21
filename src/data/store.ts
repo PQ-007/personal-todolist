@@ -1,4 +1,5 @@
 import type { NewTask, Task } from '../domain/types';
+import { t } from '../i18n';
 
 /** Where tasks live. The UI only ever talks to this interface. */
 export interface TaskStore {
@@ -13,7 +14,7 @@ export interface TaskStore {
 
 /** The user has to sign in (again) before the store can be used. */
 export class AuthError extends Error {
-  constructor(message = 'Google session ended. Press Connect to continue.') {
+  constructor(message = t('err.session')) {
     super(message);
     this.name = 'AuthError';
   }
@@ -21,7 +22,7 @@ export class AuthError extends Error {
 
 /** The task was changed elsewhere since we last loaded it. */
 export class ConflictError extends Error {
-  constructor(message = 'This task was changed in Google Calendar. The latest version has been loaded.') {
+  constructor(message = t('err.conflict')) {
     super(message);
     this.name = 'ConflictError';
   }

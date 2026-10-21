@@ -44,6 +44,18 @@ describe('parseInline', () => {
     expect(parseInline('a*b*c')).toHaveLength(1);
   });
 
+  it('does not italicise underscores inside Japanese or mixed-script words', () => {
+    const s = '（株）資生堂_Google/Yahooの管理画面RAW取得_日次レポート';
+    expect(parseInline(s)).toEqual([{ t: 'text', v: s }]);
+    const id = 'クレーネル_ 261001_クレーネル_50ウマ娘 / 52_FGO_玉兎_後期_X日次';
+    expect(parseInline(id)).toEqual([{ t: 'text', v: id }]);
+    expect(parseInline('今日は _大事_ な日')).toEqual([
+      { t: 'text', v: '今日は ' },
+      { t: 'em', c: [{ t: 'text', v: '大事' }] },
+      { t: 'text', v: ' な日' },
+    ]);
+  });
+
   it('handles Japanese text', () => {
     expect(parseInline('**重要** 今日のタスク')).toEqual([
       { t: 'strong', c: [{ t: 'text', v: '重要' }] },

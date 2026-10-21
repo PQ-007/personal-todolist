@@ -1,3 +1,5 @@
+import type { Label } from './labels';
+
 /** A task is one Google Calendar event (or one demo event). */
 export interface Task {
   id: string;
@@ -11,6 +13,8 @@ export interface Task {
   /** Google Calendar colorId. */
   colorId: string;
   done: boolean;
+  /** Work or personal; unset for unlabeled tasks. */
+  label?: Label;
   /** Google's version tag, used to detect edits made elsewhere before we overwrite them. */
   etag?: string;
   /** Private extended properties we don't manage ourselves; kept so we never drop them. */

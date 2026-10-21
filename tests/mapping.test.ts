@@ -40,6 +40,15 @@ describe('fromGoogle', () => {
   });
 });
 
+describe('labels', () => {
+  it('reads a known label and ignores anything else', () => {
+    expect(fromGoogle({ ...timed, extendedProperties: { private: { label: 'personal' } } }).label).toBe('personal');
+    const odd = fromGoogle({ ...timed, extendedProperties: { private: { label: 'hobby' } } });
+    expect(odd.label).toBeUndefined();
+    expect(odd.extraProps).toBeUndefined();
+  });
+});
+
 describe('toGoogle', () => {
   it('builds a full body and keeps foreign private props', () => {
     const t = fromGoogle(timed);
@@ -49,7 +58,7 @@ describe('toGoogle', () => {
       colorId: '3',
       start: { dateTime: '2026-10-19T00:00:00.000Z' },
       end: { dateTime: '2026-10-19T01:30:00.000Z' },
-      extendedProperties: { private: { other: 'keep', done: '1' } },
+      extendedProperties: { private: { other: 'keep', done: '1', label: '' } },
     });
   });
 
@@ -69,7 +78,13 @@ describe('patchBody', () => {
   });
 
   it('does not resend an unchanged (possibly HTML-origin) description', () => {
-    expect(patchBody(base, { ...base, done: false })).toEqual({ extendedProperties: { private: { other: 'keep', done: '0' } } });
+    expect(patchBody(base, { ...base, done: false })).toEqual({ extendedProperties: { private: { other: 'keep', done: '0', label: '' } } });
+  });
+
+  it('sends label changes and clears a removed label', () => {
+    const work = { ...base, label: 'work' as const };
+    expect(patchBody(base, work)).toEqual({ extendedProperties: { private: { other: 'keep', done: '1', label: 'work' } } });
+    expect(patchBody(work, base)).toEqual({ extendedProperties: { private: { other: 'keep', done: '1', label: '' } } });
   });
 
   it('sends both times when either changes, keeping multi-day lengths', () => {

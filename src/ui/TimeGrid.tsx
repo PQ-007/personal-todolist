@@ -9,15 +9,20 @@ import {
 } from 'react';
 import { colorOf } from '../domain/colors';
 import { addDays, addMin, hm, overlapsDay, pad, sameDay, startOfDay, ymd } from '../domain/dates';
+import { fmtDate, t as tr } from '../i18n';
 import { daySegments, layoutDay, type Placed, type TaskSegment } from '../domain/layout';
 import { countTasks, previewLines } from '../domain/markdown/tasks';
+import { matchesFilter } from '../domain/labels';
 import type { Task } from '../domain/types';
 import { planner, usePlanner } from '../state/planner';
 import { CREATE_SNAP_MIN, HPX, PPM, SNAP_MIN } from './constants';
 import { DoneButton } from './DoneButton';
 import { useNow } from './hooks';
+import { LabelTag } from './LabelTag';
 
 interface Props {
+  /** The consecutive days to show as columns. */
+  days: Date[];
   onOpen: (id: string) => void;
   onCreate: (start: Date) => void;
 }
@@ -25,6 +30,8 @@ interface Props {
 /** In-progress drag of one card segment. */
 interface DragInfo {
   key: string;
+  /** Column the drag started in, so the card can't be dropped outside the grid. */
+  col: number;
   task: Task;
   resizing: boolean;
   x0: number;
@@ -50,24 +57,31 @@ const resize = (t: Task, dMin: number) => {
   return { ...t, end: addMin(t.end, Math.max(dMin, SNAP_MIN - dur)) };
 };
 
-export function WeekView({ onOpen, onCreate }: Props) {
-  const { week, tasks } = usePlanner();
+/** The time at `clientY` in a day column, snapped down to the create step. */
+export function slotTime(col: Element, clientY: number, day: Date): Date {
+  const r = col.getBoundingClientRect();
+  return addMin(day, Math.floor((clientY - r.top) / PPM / CREATE_SNAP_MIN) * CREATE_SNAP_MIN);
+}
+
+export function TimeGrid({ days, onOpen, onCreate }: Props) {
+  const { tasks: all, filter } = usePlanner();
+  const tasks = all.filter((task) => matchesFilter(task, filter));
   const now = useNow();
   const calRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragInfo | null>(null);
   const [drag, setDrag] = useState<DragView | null>(null);
-  const days = Array.from({ length: 5 }, (_, i) => addDays(week, i));
   const today = startOfDay(now);
 
   useEffect(() => {
     if (calRef.current) calRef.current.scrollTop = 7 * HPX - 8;
   }, []);
 
-  const onPointerDown = (e: PointerEvent<HTMLDivElement>, seg: TaskSegment<Task>, key: string) => {
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>, seg: TaskSegment<Task>, key: string, col: number) => {
     if (e.button !== 0 || (e.target as Element).closest('.donebtn')) return;
     const card = e.currentTarget;
     dragRef.current = {
       key,
+      col,
       task: seg.task,
       resizing: !!(e.target as Element).closest('.resize'),
       x0: e.clientX,
@@ -97,7 +111,7 @@ export function WeekView({ onOpen, onCreate }: Props) {
       d.dMin = Math.max(snap, SNAP_MIN - dur);
     } else {
       d.dMin = snap;
-      d.dDay = Math.round(dx / d.colW);
+      d.dDay = Math.min(Math.max(Math.round(dx / d.colW), -d.col), days.length - 1 - d.col);
     }
     setDrag({ key: d.key, resizing: d.resizing, dMin: d.dMin, dDay: d.dDay, colW: d.colW });
   };
@@ -152,26 +166,38 @@ export function WeekView({ onOpen, onCreate }: Props) {
 
   const onColumnClick = (e: MouseEvent<HTMLDivElement>, day: Date) => {
     if ((e.target as Element).closest('.card')) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const min = Math.floor((e.clientY - r.top) / PPM / CREATE_SNAP_MIN) * CREATE_SNAP_MIN;
-    onCreate(addMin(day, min));
+    onCreate(slotTime(e.currentTarget, e.clientY, day));
   };
 
   return (
-    <div className="cal" ref={calRef} role="grid" aria-label="Week calendar">
+    <div
+      className={'cal' + (days.length === 1 ? ' single' : '')}
+      ref={calRef}
+      role="grid"
+      aria-label={tr('grid.label')}
+      style={{ '--cols': days.length } as CSSProperties}
+    >
       <div className="corner" />
       {days.map((d) => (
         <div key={ymd(d)} className={'dh' + (sameDay(d, today) ? ' today' : '')} role="columnheader">
-          <span className="dow">{d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
-          <span className="dnum" aria-label={d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}>
-            {d.getDate()}
-          </span>
+          <button
+            type="button"
+            className="dhbtn"
+            aria-label={tr('grid.openDay', { day: fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' }) })}
+            onClick={() => {
+              planner.setDay(d);
+              planner.setView('day');
+            }}
+          >
+            <span className="dow">{fmtDate(d, { weekday: 'short' })}</span>
+            <span className="dnum">{d.getDate()}</span>
+          </button>
         </div>
       ))}
 
-      <div className="adlabel">all-day</div>
+      <div className="adlabel">{tr('grid.allDay')}</div>
       {days.map((d) => (
-        <div key={ymd(d)} className="adcell">
+        <div key={ymd(d)} className="adcell" data-day={ymd(d)}>
           {tasks
             .filter((t) => t.allDay && overlapsDay(t, d))
             .map((t) => (
@@ -179,6 +205,7 @@ export function WeekView({ onOpen, onCreate }: Props) {
                 key={t.id}
                 type="button"
                 className={'chip' + (t.done ? ' done' : '')}
+                data-id={t.id}
                 style={{ '--c': colorOf(t.colorId) } as CSSProperties}
                 onClick={() => onOpen(t.id)}
               >
@@ -196,13 +223,14 @@ export function WeekView({ onOpen, onCreate }: Props) {
         ))}
       </div>
 
-      {days.map((day) => {
+      {days.map((day, col) => {
         const isToday = sameDay(day, today);
         return (
           <div
             key={ymd(day)}
             className={'dcol' + (isToday ? ' today' : '')}
             data-day={ymd(day)}
+            data-slots=""
             onClick={(e) => onColumnClick(e, day)}
           >
             {layoutDay(daySegments(tasks, day)).map((seg) => {
@@ -212,11 +240,12 @@ export function WeekView({ onOpen, onCreate }: Props) {
                   key={key}
                   seg={seg}
                   drag={drag?.key === key ? drag : null}
-                  onPointerDown={(e) => onPointerDown(e, seg, key)}
+                  onPointerDown={(e) => onPointerDown(e, seg, key, col)}
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
                   onPointerCancel={onPointerCancel}
                   onKeyDown={(e) => onCardKey(e, seg.task)}
+                  onContextMenu={onPointerCancel}
                 />
               );
             })}
@@ -236,13 +265,15 @@ interface CardProps {
   onPointerUp: (e: PointerEvent<HTMLDivElement>) => void;
   onPointerCancel: () => void;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
+  /** A long press opens the context menu; it must not also count as a click or drag. */
+  onContextMenu: () => void;
 }
 
 export function timeLabel(t: Task): string {
   if (sameDay(t.start, t.end) || (t.end.getHours() === 0 && t.end.getMinutes() === 0 && sameDay(t.start, addMin(t.end, -1)))) {
     return `${hm(t.start)}–${hm(t.end)}`;
   }
-  const wd = (d: Date) => d.toLocaleDateString(undefined, { weekday: 'short' });
+  const wd = (d: Date) => fmtDate(d, { weekday: 'short' });
   return `${wd(t.start)} ${hm(t.start)} – ${wd(t.end)} ${hm(t.end)}`;
 }
 
@@ -276,7 +307,7 @@ function Card({ seg, drag, ...handlers }: CardProps) {
       data-id={t.id}
       tabIndex={0}
       role="button"
-      aria-label={`${t.title}, ${label}${total ? `, ${doneCount} of ${total} done` : ''}${t.done ? ', finished' : ''}`}
+      aria-label={`${t.title}, ${label}${total ? tr('card.progress', { done: doneCount, total }) : ''}${t.done ? tr('card.finished') : ''}`}
       aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight"
       title={`${t.title} ${label}`}
       style={style}
@@ -285,6 +316,7 @@ function Card({ seg, drag, ...handlers }: CardProps) {
       onPointerUp={handlers.onPointerUp}
       onPointerCancel={handlers.onPointerCancel}
       onKeyDown={handlers.onKeyDown}
+      onContextMenu={handlers.onContextMenu}
     >
       <div className="spine">
         <i style={{ height: `${fill}%` }} />
@@ -294,6 +326,7 @@ function Card({ seg, drag, ...handlers }: CardProps) {
       <div className="ctime">
         <span>{label}</span>
         {total > 0 && <span className="cp">{`${doneCount}/${total}`}</span>}
+        {t.label && <LabelTag label={t.label} iconOnly />}
       </div>
       {!short && <Memo md={t.description} />}
       {seg.endsHere && <div className="resize" aria-hidden="true" />}
@@ -309,7 +342,7 @@ function Memo({ md }: { md: string }) {
       {lines.map((l, i) =>
         l.k === 'task' ? (
           <div key={i} className={'ml' + (l.done ? ' d' : '')}>
-            <b>{l.done ? '☑' : '☐'}</b>
+            <b className={'mbox' + (l.done ? ' on' : '')} />
             {l.t}
           </div>
         ) : (
