@@ -289,7 +289,6 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .scard.drop-after::after{bottom:-3px}
 .scard-grip{color:var(--faint);opacity:0;display:grid;place-items:center;transition:opacity .1s}
 .scard:hover .scard-grip{opacity:1}
-.scard-grip svg,.scard-more svg,.f-row-more svg{stroke-width:2.6}
 .scard-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500}
 .scard-rename{min-width:0;border:1px solid var(--accent);border-radius:6px;background:var(--bg);padding:2px 6px;font-size:13px}
 .scard-meta{display:flex;align-items:center;gap:6px}
