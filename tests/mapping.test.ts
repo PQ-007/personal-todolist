@@ -58,7 +58,7 @@ describe('toGoogle', () => {
       colorId: '3',
       start: { dateTime: '2026-10-19T00:00:00.000Z' },
       end: { dateTime: '2026-10-19T01:30:00.000Z' },
-      extendedProperties: { private: { other: 'keep', done: '1', label: '' } },
+      extendedProperties: { private: { other: 'keep', done: '1', label: '', tags: '' } },
     });
   });
 
@@ -78,13 +78,19 @@ describe('patchBody', () => {
   });
 
   it('does not resend an unchanged (possibly HTML-origin) description', () => {
-    expect(patchBody(base, { ...base, done: false })).toEqual({ extendedProperties: { private: { other: 'keep', done: '0', label: '' } } });
+    expect(patchBody(base, { ...base, done: false })).toEqual({ extendedProperties: { private: { other: 'keep', done: '0', label: '', tags: '' } } });
+  });
+
+  it('stores tags comma-separated and sends tag changes', () => {
+    const tagged = { ...base, tags: ['urgent', '報告'] };
+    expect(patchBody(base, tagged)).toEqual({ extendedProperties: { private: { other: 'keep', done: '1', label: '', tags: 'urgent,報告' } } });
+    expect(fromGoogle({ ...timed, extendedProperties: { private: { tags: 'urgent,報告' } } }).tags).toEqual(['urgent', '報告']);
   });
 
   it('sends label changes and clears a removed label', () => {
     const work = { ...base, label: 'work' as const };
-    expect(patchBody(base, work)).toEqual({ extendedProperties: { private: { other: 'keep', done: '1', label: 'work' } } });
-    expect(patchBody(work, base)).toEqual({ extendedProperties: { private: { other: 'keep', done: '1', label: '' } } });
+    expect(patchBody(base, work)).toEqual({ extendedProperties: { private: { other: 'keep', done: '1', label: 'work', tags: '' } } });
+    expect(patchBody(work, base)).toEqual({ extendedProperties: { private: { other: 'keep', done: '1', label: '', tags: '' } } });
   });
 
   it('sends both times when either changes, keeping multi-day lengths', () => {

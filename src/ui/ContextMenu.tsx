@@ -15,6 +15,8 @@ export type MenuEntry =
       onSelect: () => void;
     }
   | { kind: 'separator' }
+  /** A row of small buttons, e.g. a number of days. */
+  | { kind: 'chips'; label: string; value?: string; options: { id: string; label: string }[]; onSelect: (id: string) => void }
   /** A row of color swatches; `options` maps an id to its CSS color and accessible name. */
   | { kind: 'swatches'; label: string; value: string; options: { id: string; color: string; name: string }[]; onSelect: (id: string) => void };
 
@@ -96,6 +98,28 @@ export function ContextMenu({ menu, onClose }: { menu: MenuState; onClose: () =>
     >
       {menu.items.map((item, i) => {
         if (item.kind === 'separator') return <div key={i} className="ctxsep" role="separator" />;
+        if (item.kind === 'chips') {
+          return (
+            <div key={i} className="ctxchips" role="group" aria-label={item.label}>
+              <span className="ctxchips-label">{item.label}</span>
+              {item.options.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={o.id === item.value}
+                  className={'ctxchip' + (o.id === item.value ? ' on' : '')}
+                  onClick={() => {
+                    onClose();
+                    item.onSelect(o.id);
+                  }}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          );
+        }
         if (item.kind === 'swatches') {
           return (
             <div key={i} className="ctxswatches" role="group" aria-label={item.label}>

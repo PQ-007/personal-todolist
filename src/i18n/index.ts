@@ -35,17 +35,35 @@ export function t(key: MsgKey, vars?: Record<string, string | number>): string {
   return vars ? msg.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : msg;
 }
 
+/** A length of time: "45m", "2h", "1h 30m" (in the current language). */
+export function fmtDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return h && m ? t('dur.hm', { h, m }) : h ? t('dur.h', { h }) : t('dur.m', { m });
+}
+
 /** Formats a date in the current language. */
 export const fmtDate = (d: Date, opts: Intl.DateTimeFormatOptions) =>
   lang === 'mn' ? mnDate(d, opts) : d.toLocaleDateString(lang, opts);
 
 /** Formats a date range in the current language, collapsing shared parts ("October 2026"). */
 export function fmtRange(a: Date, b: Date, opts: Intl.DateTimeFormatOptions): string {
+  if (lang === 'ja' && opts.day) return jaRange(a, b, !!opts.year);
   if (lang !== 'mn') return new Intl.DateTimeFormat(lang, opts).formatRange(a, b);
   if (a.getFullYear() !== b.getFullYear()) return `${mnDate(a, opts)} – ${mnDate(b, opts)}`;
   const { year: _, ...rest } = opts;
   const head = mnDate(a, opts);
-  return a.getMonth() === b.getMonth() && (!opts.day || a.getDate() === b.getDate()) ? head : `${head} – ${mnDate(b, rest)}`;
+  if (a.getMonth() !== b.getMonth()) return `${head} – ${mnDate(b, rest)}`;
+  return opts.day && a.getDate() !== b.getDate() ? `${mnDate(a, { ...opts, weekday: undefined })}–${b.getDate()}` : head;
+}
+
+/** "2026年10月21日～23日": ICU falls back to "2026/10/21～2026/10/23" for Japanese ranges with a long month. */
+function jaRange(a: Date, b: Date, withYear: boolean): string {
+  const y = (d: Date) => (withYear ? `${d.getFullYear()}年` : '');
+  const md = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`;
+  if (a.getFullYear() !== b.getFullYear()) return `${y(a)}${md(a)}～${y(b)}${md(b)}`;
+  if (a.getMonth() !== b.getMonth()) return `${y(a)}${md(a)}～${md(b)}`;
+  return a.getDate() === b.getDate() ? `${y(a)}${md(a)}` : `${y(a)}${md(a)}～${b.getDate()}日`;
 }
 
 const MN_WEEKDAYS = ['Ням', 'Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба'];

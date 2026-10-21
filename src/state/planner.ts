@@ -1,14 +1,30 @@
 import { useSyncExternalStore } from 'react';
 import { copyOf, placeCopy, weekCopies } from '../domain/clipboard';
-import { addDays, mondayOf, startOfDay } from '../domain/dates';
+import { DEFAULT_COLOR } from '../domain/colors';
+import { addDays, hm, startOfDay } from '../domain/dates';
 import type { NewTask, Task } from '../domain/types';
 import { createDemoStore } from '../data/demo/demoStore';
 import { clearToken, getToken, hasToken, restoreToken, signIn } from '../data/google/auth';
 import { createGoogleStore } from '../data/google/googleStore';
+import { createStackStore, type StackStore } from '../data/stackStore';
 import { AuthError, ConflictError, type TaskStore } from '../data/store';
-import { t as tr } from '../i18n';
-import { matchesFilter, type LabelFilter } from '../domain/labels';
-import { loadFilter, saveFilter, loadSettings, saveSettings, type Settings } from './settings';
+import { fmtDate, t as tr } from '../i18n';
+import { labelFor, matchesFilter, type LabelFilter } from '../domain/labels';
+import { itemFromTask, nextFreeSlot, parseStackInput, taskFromItem, type StackItem } from '../domain/stack';
+import { clampSpan, sameRange, stepDay, visibleRange, type DayRange, type View } from '../domain/views';
+import {
+  loadFilter,
+  loadMode,
+  loadSettings,
+  loadStackOpen,
+  loadView,
+  saveFilter,
+  saveMode,
+  saveSettings,
+  saveStackOpen,
+  saveView,
+  type Settings,
+} from './settings';
 
 export type SyncState = '' | 'loading' | 'saving' | 'saved' | 'error';
 
@@ -17,11 +33,18 @@ export interface ToastAction {
   run: () => void;
 }
 
+/** Focus: today's work, one task at a time. Plan: the calendar and the to-do stack. */
+export type Mode = 'focus' | 'plan';
+
 export interface PlannerState {
-  view: 'day' | 'workweek' | 'week';
-  /** The selected day: the day view and the sidebar show it, the week views show its week. */
+  mode: Mode;
+  view: View;
+  /** Columns in the day view (1–7). */
+  span: number;
+  /** The selected day: the sidebar lists it and every view contains it. */
   day: Date;
-  week: Date;
+  /** The days on screen, which are the days loaded. */
+  range: DayRange;
   tasks: Task[];
   needAuth: boolean;
   sync: SyncState;
@@ -30,6 +53,9 @@ export interface PlannerState {
   filter: LabelFilter;
   /** The task last copied, ready to paste. */
   clipboard: NewTask | null;
+  /** To-dos without a time yet, in the user's order. */
+  stack: StackItem[];
+  stackOpen: boolean;
   settings: Settings;
 }
 
@@ -44,6 +70,7 @@ export class Planner {
   private listeners = new Set<() => void>();
   private demo = createDemoStore();
   private store!: TaskStore;
+  private stackStore!: StackStore;
   /** Last server-confirmed version of each task. */
   private server = new Map<string, Task>();
   /** Per-task queue of pending store calls. */
@@ -58,19 +85,30 @@ export class Planner {
   constructor() {
     restoreToken();
     const day = startOfDay(new Date());
+    const { view, span } = loadView();
     this.state = {
-      view: 'day',
+      mode: loadMode(),
+      view,
+      span,
       day,
-      week: mondayOf(day),
+      range: visibleRange({ view, day, span }),
       tasks: [],
       needAuth: false,
       sync: '',
       toast: null,
       clipboard: null,
+      stack: [],
+      stackOpen: loadStackOpen(),
       filter: loadFilter(),
       settings: loadSettings(),
     };
     this.store = this.makeStore();
+    this.loadStack();
+  }
+
+  private loadStack() {
+    this.stackStore = createStackStore(this.state.settings.mode);
+    this.set({ stack: this.stackStore.load() });
   }
 
   subscribe = (fn: () => void) => {
@@ -114,7 +152,8 @@ export class Planner {
     }
     this.set({ needAuth: false, sync: 'loading' });
     try {
-      const tasks = await this.store.list(this.state.week, addDays(this.state.week, 7));
+      const { from, days } = this.state.range;
+      const tasks = await this.store.list(from, addDays(from, days));
       if (seq !== this.loadSeq) return;
       this.server = new Map(tasks.map((t) => [t.id, t]));
       this.set({ tasks, sync: '' });
@@ -123,26 +162,42 @@ export class Planner {
     }
   }
 
-  /** Selects `day`, loading its week if needed. */
-  setDay(day: Date) {
-    const d = startOfDay(day);
-    const week = mondayOf(d);
-    const moved = week.getTime() !== this.state.week.getTime();
-    this.set({ day: d, week });
+  /** Applies a new view, day or span, loading the days on screen when they change. */
+  private navigate(patch: Partial<Pick<PlannerState, 'view' | 'day' | 'span'>>) {
+    const next = { view: this.state.view, day: this.state.day, span: this.state.span, ...patch };
+    next.day = startOfDay(next.day);
+    next.span = clampSpan(next.span);
+    const range = visibleRange(next);
+    const moved = !sameRange(range, this.state.range);
+    if (patch.view || patch.span) saveView({ view: next.view, span: next.span });
+    this.set({ ...next, range });
     if (moved) void this.refresh();
   }
-  shiftDay(n: number) {
-    this.setDay(addDays(this.state.day, n));
+
+  setDay(day: Date) {
+    this.navigate({ day });
   }
-  shiftWeek(n: number) {
-    this.setDay(addDays(this.state.day, 7 * n));
+  /** Previous (-1) or next (1) day, days, week or month, depending on the view. */
+  step(n: number) {
+    this.navigate({ day: stepDay(this.state, n) });
+  }
+  /** Previous or next day, whatever the view (the focus mode always moves by a day). */
+  stepDay(n: number) {
+    this.navigate({ day: addDays(this.state.day, n) });
+  }
+  /** Picking a calendar view always shows the calendar. */
+  setView(view: View, span?: number) {
+    this.setMode('plan');
+    this.navigate(span ? { view, span } : { view });
+  }
+  setMode(mode: Mode) {
+    if (mode === this.state.mode) return;
+    saveMode(mode);
+    this.set({ mode });
   }
   setFilter(filter: LabelFilter) {
     saveFilter(filter);
     this.set({ filter });
-  }
-  setView(view: PlannerState['view']) {
-    this.set({ view });
   }
 
   /* ---------- auth & settings ---------- */
@@ -161,6 +216,7 @@ export class Planner {
     this.set({ settings, tasks: [] });
     this.server.clear();
     this.store = this.makeStore();
+    this.loadStack();
     if (settings.mode === 'google' && !hasToken()) await this.connect();
     else await this.refresh();
   }
@@ -295,12 +351,13 @@ export class Planner {
   }
 
   /**
-   * Copies last week's tasks into the week on screen: its first `days` days (5 for the
-   * workdays view), only labels the filter shows, skipping tasks already there. Undo removes them.
+   * Copies the 7 days before the range on screen into it (5 in the workdays view), only the
+   * labels the filter shows, skipping tasks already there. Undo removes them.
    */
-  async copyPreviousWeek(days: number) {
-    const { week, filter } = this.state;
-    const from = addDays(week, -7);
+  async copyPreviousWeek() {
+    const { range, filter } = this.state;
+    const { days } = range;
+    const from = addDays(range.from, -7);
     let source: Task[];
     try {
       source = await this.store.list(from, addDays(from, days));
@@ -309,7 +366,7 @@ export class Planner {
       return;
     }
     // The week on screen may have changed while last week was loading.
-    if (this.state.week.getTime() !== week.getTime()) return;
+    if (!sameRange(this.state.range, range)) return;
     const copies = weekCopies(
       source.filter((t) => matchesFilter(t, filter)),
       this.state.tasks,
@@ -331,6 +388,121 @@ export class Planner {
   paste(day: Date, time?: Date) {
     const c = this.state.clipboard;
     if (c) void this.create(placeCopy(c, day, time));
+  }
+
+  /* ---------- to-do stack ---------- */
+
+  setStackOpen(open: boolean) {
+    saveStackOpen(open);
+    this.set({ stackOpen: open });
+  }
+
+  private setStack(stack: StackItem[]) {
+    this.stackStore.save(stack);
+    this.set({ stack });
+  }
+
+  private newStackId = () => `s-${Date.now().toString(36)}-${++this.tmpSeq}`;
+
+  /** Adds a to-do from quick-add text ("Write report 1h"); it gets the label being shown. */
+  addToStack(text: string) {
+    const parsed = parseStackInput(text);
+    if (!parsed) return;
+    const item: StackItem = {
+      id: this.newStackId(),
+      ...parsed,
+      description: '',
+      colorId: DEFAULT_COLOR,
+      label: labelFor(this.state.filter),
+    };
+    this.setStack([...this.state.stack, item]);
+  }
+
+  updateStackItem(id: string, patch: Partial<Omit<StackItem, 'id'>>) {
+    this.setStack(this.state.stack.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }
+
+  /** Moves an item so it ends up at `index` in the list as it is now. */
+  moveStackItem(id: string, index: number) {
+    const from = this.state.stack.findIndex((s) => s.id === id);
+    if (from < 0) return;
+    const next = [...this.state.stack];
+    const [item] = next.splice(from, 1);
+    next.splice(from < index ? index - 1 : index, 0, item!);
+    this.setStack(next);
+  }
+
+  /** Takes an item out of the stack; returns it with its position, to put it back on undo. */
+  private takeStackItem(id: string): { item: StackItem; index: number } | null {
+    const index = this.state.stack.findIndex((s) => s.id === id);
+    if (index < 0) return null;
+    const item = this.state.stack[index]!;
+    this.setStack(this.state.stack.filter((s) => s.id !== id));
+    return { item, index };
+  }
+
+  private putBack(item: StackItem, index: number) {
+    const next = [...this.state.stack];
+    next.splice(Math.min(index, next.length), 0, item);
+    this.setStack(next);
+  }
+
+  deleteStackItem(id: string) {
+    const taken = this.takeStackItem(id);
+    if (!taken) return;
+    this.toast(tr('toast.deleted', { title: taken.item.title }), {
+      label: tr('toast.undo'),
+      run: () => this.putBack(taken.item, taken.index),
+    });
+  }
+
+  /** Puts a to-do on the calendar at `start` (or on that day when `allDay`). Undo puts it back. */
+  scheduleItem(id: string, start: Date, allDay = false) {
+    const taken = this.takeStackItem(id);
+    if (!taken) return;
+    const { id: taskId } = this.startCreate(taskFromItem(taken.item, start, allDay));
+    const when = fmtDate(start, { month: 'short', day: 'numeric', weekday: 'short' }) + (allDay ? '' : ' ' + hm(start));
+    this.toast(tr('stack.scheduled', { title: taken.item.title, when }), {
+      label: tr('toast.undo'),
+      run: () => {
+        void this.remove(taskId);
+        this.putBack(taken.item, taken.index);
+      },
+    });
+  }
+
+  /** Schedules a to-do at the first free time on `day` (see `nextFreeSlot`). */
+  async scheduleItemOn(id: string, day: Date) {
+    const item = this.state.stack.find((s) => s.id === id);
+    if (!item) return;
+    const d = startOfDay(day);
+    const { from, days } = this.state.range;
+    let tasks = this.state.tasks;
+    if (d < from || d >= addDays(from, days)) {
+      try {
+        tasks = await this.store.list(d, addDays(d, 1));
+      } catch (e) {
+        this.fail(e);
+        return;
+      }
+    }
+    this.scheduleItem(id, nextFreeSlot(tasks, d, item.minutes, new Date()));
+  }
+
+  /** Moves a calendar task back to the top of the stack. Undo restores the task. */
+  unschedule(taskId: string) {
+    const t = this.find(taskId);
+    if (!t) return;
+    const item = itemFromTask(t, this.newStackId());
+    this.setStack([item, ...this.state.stack]);
+    void this.remove(t.id);
+    this.toast(tr('stack.moved', { title: t.title }), {
+      label: tr('toast.undo'),
+      run: () => {
+        this.takeStackItem(item.id);
+        void this.create({ ...copyOf(t), done: t.done, extraProps: t.extraProps });
+      },
+    });
   }
 
   patch(id: string, patch: Partial<Task>) {

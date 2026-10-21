@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { inlineText, parseInline, parseMarkdown, type Block } from '../src/domain/markdown/parse';
-import { countTasks, previewLines, toggleTaskLine } from '../src/domain/markdown/tasks';
+import { countTasks, toggleTaskLine } from '../src/domain/markdown/tasks';
 
 describe('parseInline', () => {
   it('parses bold, em, del and code', () => {
@@ -126,23 +126,5 @@ describe('countTasks', () => {
   });
   it('skips code fences', () => {
     expect(countTasks('```\n- [ ] x\n```\n- [ ] y')).toEqual({ t: 1, d: 0 });
-  });
-});
-
-describe('previewLines', () => {
-  it('summarises like the card preview', () => {
-    const md = '## Batch 1\n\n- [x] Export the **sheet**\n- [ ] Upload\n- bullet\n> Deadline is **09:00**\nSee [guide](https://x.io)';
-    expect(previewLines(md)).toEqual([
-      { k: 'head', t: 'Batch 1' },
-      { k: 'task', done: true, t: 'Export the sheet' },
-      { k: 'task', done: false, t: 'Upload' },
-      { k: 'text', t: '• bullet' },
-      { k: 'text', t: 'Deadline is 09:00' },
-      { k: 'text', t: 'See guide' },
-    ]);
-  });
-  it('limits lines and skips empty tasks and code', () => {
-    expect(previewLines('a\nb\nc', 2)).toHaveLength(2);
-    expect(previewLines('- [ ] \n```\ncode\n```\nz')).toEqual([{ k: 'text', t: 'z' }]);
   });
 });

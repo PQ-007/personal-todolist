@@ -4,17 +4,25 @@ A personal weekly planner and to-do list that uses **Google Calendar as its data
 Every calendar event is a task; its description holds markdown notes with checklists.
 It installs on your phone as a PWA.
 
-- Day, workdays (Mon–Fri) and week time grids, like Google Calendar, with a sidebar that lists the selected day's tasks: the current task with its checklist, the rest of the day, and a quick-add box (`14:00 Review PR`, `9:30-11:00 Planning`, or just a title for an all-day task)
-- Shortcuts: `t` today, `d` day view, `x` workdays view, `w` week view, `←`/`→` (or `k`/`j`) previous/next, `n` quick add, `c` new task in the full editor
-- English, Mongolian and Japanese (Settings → Language; defaults to the browser language)
-- Work and Personal labels (stored in the event's private properties); the top bar filters to All, Work or Personal, and new tasks take the active filter's label
-- Clicking a task opens a large read view (when, label, checklist progress, live checkboxes) with edit, duplicate, copy and delete; `E` edits
-- Cards preview the notes, show checklist progress (`3/5`) and a spine that fills as items are ticked
-- Click a card for rendered notes with live checkboxes, a markdown editor, color, done, dates, delete
-- Drag to move, drag the bottom edge to resize (15-minute snap), click an empty slot to create
-- “Copy last week” (week and workdays views) copies the previous week’s tasks into the week on screen, with fresh checklists, only for the labels being shown, skipping ones already there; Undo removes them
-- Right-click a task for quick actions: color, open, edit, done, Work/Personal, duplicate, move to the next day, copy, delete; right-click an empty slot to paste or create there. `Ctrl/⌘+C` copies the focused task, `Ctrl/⌘+V` pastes it on the selected day, `Delete` removes it (with Undo)
-- Demo mode (data in this browser only) so you can try it without Google
+Two modes, one tool:
+
+- **Focus** (`f`, the default): one calm column for the day. The task to do now, with its checklist, the
+  time left and a progress line; the rest of today; your to-dos with a Start button; and one add box
+  (`14:00 Review PR` goes on the calendar, anything else becomes a to-do). Completed work folds away.
+- **Plan** (`p`): the calendar (Day or 2–7 days, Workdays, Week, Month) between two sidebars: on the left a
+  mini month and today's work, on the right the to-do stack (`s`). Drag to-dos onto the calendar, drag
+  tasks back, copy last week, paste.
+- In both, clicking a task in today's list opens it in place (time, live checklist, Done/Edit); no dialog.
+
+Everywhere:
+
+- **Command palette** (`Ctrl/⌘ K` or `/`): every action and a search over the tasks on screen
+- Click a task for a large read view with live checkboxes; right-click for quick actions (color,
+  Work/Personal, duplicate, move to the next day, move to the to-do stack, copy, delete with Undo)
+- Work and Personal labels and #tags, saved in the event; the label filter applies to every view
+- Finished tasks fade; drag to move, drag the bottom edge to resize, `Delete` removes with Undo
+- Keys (work with any keyboard layout, e.g. Mongolian or Japanese input): `t` today, `←`/`→` (or `k`/`j`), `d` / `1`–`7` / `x` / `w` / `m` views, `c` new task, `n` add box
+- English, Mongolian and Japanese; dark and light; installs as a PWA; demo mode works without Google
 
 ## Quick start
 

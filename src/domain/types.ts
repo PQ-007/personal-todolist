@@ -15,6 +15,8 @@ export interface Task {
   done: boolean;
   /** Work or personal; unset for unlabeled tasks. */
   label?: Label;
+  /** Free-form tags without "#" (see tags.ts). */
+  tags?: string[];
   /** Google's version tag, used to detect edits made elsewhere before we overwrite them. */
   etag?: string;
   /** Private extended properties we don't manage ourselves; kept so we never drop them. */

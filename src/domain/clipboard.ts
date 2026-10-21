@@ -9,6 +9,7 @@ export function copyOf(t: Task): NewTask {
     description: t.description,
     colorId: t.colorId,
     label: t.label,
+    tags: t.tags,
     done: false,
     allDay: t.allDay,
     start: t.start,

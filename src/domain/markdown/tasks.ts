@@ -40,28 +40,3 @@ export function countTasks(md: string): { t: number; d: number } {
   }
   return { t, d };
 }
-
-export type PreviewLine = { k: 'task'; done: boolean; t: string } | { k: 'text' | 'head'; t: string };
-
-const plain = (s: string) => s.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`~]/g, '');
-
-/** The first `max` meaningful lines of a memo, for card previews. Code blocks are skipped. */
-export function previewLines(md: string, max = 10): PreviewLine[] {
-  const out: PreviewLine[] = [];
-  let fence = false;
-  for (const raw of splitLines(md || '')) {
-    if (FENCE.test(raw)) {
-      fence = !fence;
-      continue;
-    }
-    if (fence || !raw.trim()) continue;
-    let m: RegExpMatchArray | null;
-    if ((m = raw.match(/^\s*[-*+]\s+\[( |x|X)\]\s*(.*)$/))) {
-      if (m[2]!.trim()) out.push({ k: 'task', done: m[1] !== ' ', t: plain(m[2]!) });
-    } else if ((m = raw.match(/^\s*[-*+]\s+(.*)$/))) out.push({ k: 'text', t: '• ' + plain(m[1]!) });
-    else if ((m = raw.match(/^\s*#{1,6}\s+(.*)$/))) out.push({ k: 'head', t: plain(m[1]!) });
-    else out.push({ k: 'text', t: plain(raw.replace(/^\s*>\s?/, '').trim()) });
-    if (out.length >= max) break;
-  }
-  return out;
-}

@@ -1,4 +1,5 @@
 import { isLabel, type LabelFilter } from '../domain/labels';
+import { clampSpan, type View } from '../domain/views';
 
 export type Mode = 'demo' | 'google';
 
@@ -14,6 +15,7 @@ const CFG_KEY = 'planner_cfg';
 const THEME_KEY = 'planner_theme';
 const LANG_KEY = 'planner_lang';
 const FILTER_KEY = 'planner_filter';
+const VIEW_KEY = 'planner_view';
 
 export const envClientId = (): string => (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() ?? '';
 
@@ -64,3 +66,27 @@ export const loadFilter = (): LabelFilter => {
   return isLabel(f) ? f : 'all';
 };
 export const saveFilter = (f: LabelFilter) => write(FILTER_KEY, f);
+
+const VIEWS: View[] = ['day', 'workweek', 'week', 'month'];
+export function loadView(): { view: View; span: number } {
+  try {
+    const v = JSON.parse(read(VIEW_KEY) ?? '{}') as { view?: View; span?: number };
+    return { view: v.view && VIEWS.includes(v.view) ? v.view : 'workweek', span: clampSpan(v.span ?? 1) };
+  } catch {
+    return { view: 'workweek', span: 1 };
+  }
+}
+export const saveView = (v: { view: View; span: number }) => write(VIEW_KEY, JSON.stringify(v));
+
+const STACK_OPEN_KEY = 'planner_stack_open';
+/** The side panel starts open on wide screens (on narrow ones it would cover the calendar). */
+export const loadStackOpen = () => {
+  const saved = read(STACK_OPEN_KEY);
+  return saved ? saved === '1' : (globalThis.innerWidth ?? 1280) > 980;
+};
+export const saveStackOpen = (open: boolean) => write(STACK_OPEN_KEY, open ? '1' : '0');
+
+const MODE_KEY = 'planner_mode';
+/** The app opens in focus mode unless the user last left it in plan mode. */
+export const loadMode = (): 'focus' | 'plan' => (read(MODE_KEY) === 'plan' ? 'plan' : 'focus');
+export const saveMode = (m: 'focus' | 'plan') => write(MODE_KEY, m);

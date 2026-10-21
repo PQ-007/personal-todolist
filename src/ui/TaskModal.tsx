@@ -3,6 +3,7 @@ import { COLORS, COLOR_NAMES, DEFAULT_COLOR } from '../domain/colors';
 import { addMin } from '../domain/dates';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
 import { LABELS, type Label } from '../domain/labels';
+import { formatTags, parseTagField } from '../domain/tags';
 import type { Task } from '../domain/types';
 import {
   formFromTask,
@@ -29,6 +30,8 @@ interface Draft {
   description: string;
   colorId: string;
   label?: Label;
+  /** Tags as typed: "#report #urgent". */
+  tagsText: string;
   done: boolean;
   when: WhenForm;
 }
@@ -39,7 +42,7 @@ function initial(target: ModalTarget): { task: Task | null; draft: Draft } {
     if (t) {
       return {
         task: t,
-        draft: { title: t.title, description: t.description, colorId: t.colorId, label: t.label, done: t.done, when: formFromTask(t) },
+        draft: { title: t.title, description: t.description, colorId: t.colorId, label: t.label, tagsText: formatTags(t.tags), done: t.done, when: formFromTask(t) },
       };
     }
   }
@@ -51,6 +54,7 @@ function initial(target: ModalTarget): { task: Task | null; draft: Draft } {
       description: '',
       colorId: DEFAULT_COLOR,
       label: target.kind === 'new' ? target.label : undefined,
+      tagsText: '',
       done: false,
       when: formFromTask({ start, end: addMin(start, 60), allDay: false }),
     },
@@ -96,7 +100,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
       planner.toast(tr(err));
       return;
     }
-    const fields = { title, description: draft.description, colorId: draft.colorId, label: draft.label, done: draft.done, ...range };
+    const fields = { title, description: draft.description, colorId: draft.colorId, label: draft.label, tags: parseTagField(draft.tagsText), done: draft.done, ...range };
     onClose();
     if (task) {
       const cur = planner.find(task.id) ?? task;
@@ -237,6 +241,18 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
             </button>
           ))}
         </div>
+
+        <label className="mtags">
+          <span>{tr('tags.label')}</span>
+          <input
+            type="text"
+            value={draft.tagsText}
+            placeholder={tr('tags.placeholder')}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => change({ tagsText: e.target.value })}
+          />
+        </label>
 
         <div className="tabs" role="tablist">
           <button

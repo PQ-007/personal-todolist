@@ -3,19 +3,21 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
 } from 'react';
 import { colorOf } from '../domain/colors';
 import { addDays, addMin, hm, overlapsDay, pad, sameDay, startOfDay, ymd } from '../domain/dates';
-import { fmtDate, t as tr } from '../i18n';
+import { fmtDate, fmtDuration, t as tr } from '../i18n';
 import { daySegments, layoutDay, type Placed, type TaskSegment } from '../domain/layout';
-import { countTasks, previewLines } from '../domain/markdown/tasks';
+import { countTasks } from '../domain/markdown/tasks';
 import { matchesFilter } from '../domain/labels';
 import type { Task } from '../domain/types';
 import { planner, usePlanner } from '../state/planner';
 import { CREATE_SNAP_MIN, HPX, PPM, SNAP_MIN } from './constants';
+import { isStackDrag, overStack, stackDrag } from './dnd';
 import { DoneButton } from './DoneButton';
 import { useNow } from './hooks';
 import { LabelTag } from './LabelTag';
@@ -41,7 +43,13 @@ interface DragInfo {
   dMin: number;
   dDay: number;
 }
-type DragView = Pick<DragInfo, 'key' | 'resizing' | 'dMin' | 'dDay' | 'colW'>;
+type DragView = Pick<DragInfo, 'key' | 'resizing' | 'dMin' | 'dDay' | 'colW'> & {
+  /** Over the to-do stack: dropping moves the task back there. */
+  toStack: boolean;
+};
+
+/** Marks the stack panel while a calendar card is dragged over it. */
+const markStack = (on: boolean) => document.querySelector('.stack')?.classList.toggle('drop-target', on);
 
 const DRAG_THRESHOLD_PX = 5;
 
@@ -70,10 +78,21 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
   const calRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragInfo | null>(null);
   const [drag, setDrag] = useState<DragView | null>(null);
+  /** Where a to-do dragged from the stack would land: a column and minute, or an all-day cell. */
+  const [drop, setDrop] = useState<{ day: string; min?: number } | null>(null);
   const today = startOfDay(now);
+  const showNow = days.some((d) => sameDay(d, today));
+  const nowTop = (now.getHours() * 60 + now.getMinutes()) * PPM;
 
   useEffect(() => {
     if (calRef.current) calRef.current.scrollTop = 7 * HPX - 8;
+  }, []);
+
+  // A stack drag can end anywhere (or be cancelled with Escape); always clear the preview.
+  useEffect(() => {
+    const clear = () => setDrop(null);
+    document.addEventListener('dragend', clear);
+    return () => document.removeEventListener('dragend', clear);
   }, []);
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>, seg: TaskSegment<Task>, key: string, col: number) => {
@@ -113,7 +132,9 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
       d.dMin = snap;
       d.dDay = Math.min(Math.max(Math.round(dx / d.colW), -d.col), days.length - 1 - d.col);
     }
-    setDrag({ key: d.key, resizing: d.resizing, dMin: d.dMin, dDay: d.dDay, colW: d.colW });
+    const toStack = !d.resizing && overStack(e.clientX, e.clientY);
+    markStack(toStack);
+    setDrag({ key: d.key, resizing: d.resizing, dMin: d.dMin, dDay: d.dDay, colW: d.colW, toStack });
   };
 
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
@@ -126,7 +147,9 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
     } catch {
       /* already released */
     }
+    markStack(false);
     if (!d.moved) return onOpen(d.task.id);
+    if (!d.resizing && overStack(e.clientX, e.clientY)) return planner.unschedule(d.task.id);
     if (d.resizing) {
       if (d.dMin) void planner.update(resize(d.task, d.dMin));
     } else if (d.dMin || d.dDay) void planner.update(shift(d.task, d.dDay, d.dMin));
@@ -135,6 +158,33 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
   const onPointerCancel = () => {
     dragRef.current = null;
     setDrag(null);
+    markStack(false);
+  };
+
+  /* ---------- dropping to-dos from the stack ---------- */
+
+  const onColumnDragOver = (e: DragEvent<HTMLDivElement>, day: Date) => {
+    if (!isStackDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const r = e.currentTarget.getBoundingClientRect();
+    const min = Math.max(0, Math.floor((e.clientY - r.top) / PPM / SNAP_MIN) * SNAP_MIN);
+    if (drop?.day !== ymd(day) || drop.min !== min) setDrop({ day: ymd(day), min });
+  };
+  const onColumnDrop = (e: DragEvent<HTMLDivElement>, day: Date) => {
+    if (!isStackDrag(e) || drop?.min === undefined) return;
+    e.preventDefault();
+    planner.scheduleItem(stackDrag.item!.id, addMin(day, drop.min));
+    setDrop(null);
+  };
+  const onAllDayDrop = (e: DragEvent<HTMLDivElement>, day: Date) => {
+    if (!isStackDrag(e)) return;
+    e.preventDefault();
+    planner.scheduleItem(stackDrag.item!.id, day, true);
+    setDrop(null);
+  };
+  const leave = (e: DragEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrop(null);
   };
 
   const onCardKey = (e: KeyboardEvent<HTMLDivElement>, t: Task) => {
@@ -179,7 +229,11 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
     >
       <div className="corner" />
       {days.map((d) => (
-        <div key={ymd(d)} className={'dh' + (sameDay(d, today) ? ' today' : '')} role="columnheader">
+        <div
+          key={ymd(d)}
+          className={'dh' + (sameDay(d, today) ? ' today' : '') + (d.getDay() === 0 || d.getDay() === 6 ? ' weekend' : '')}
+          role="columnheader"
+        >
           <button
             type="button"
             className="dhbtn"
@@ -189,15 +243,26 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
               planner.setView('day');
             }}
           >
-            <span className="dow">{fmtDate(d, { weekday: 'short' })}</span>
             <span className="dnum">{d.getDate()}</span>
+            <span className="dow">{fmtDate(d, { weekday: days.length > 7 ? 'short' : 'long' })}</span>
           </button>
         </div>
       ))}
 
       <div className="adlabel">{tr('grid.allDay')}</div>
       {days.map((d) => (
-        <div key={ymd(d)} className="adcell" data-day={ymd(d)}>
+        <div
+          key={ymd(d)}
+          className={'adcell' + (drop?.day === ymd(d) && drop.min === undefined ? ' dropping' : '')}
+          data-day={ymd(d)}
+          onDragOver={(e) => {
+            if (!isStackDrag(e)) return;
+            e.preventDefault();
+            if (drop?.day !== ymd(d) || drop.min !== undefined) setDrop({ day: ymd(d) });
+          }}
+          onDragLeave={leave}
+          onDrop={(e) => onAllDayDrop(e, d)}
+        >
           {tasks
             .filter((t) => t.allDay && overlapsDay(t, d))
             .map((t) => (
@@ -225,14 +290,21 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
 
       {days.map((day, col) => {
         const isToday = sameDay(day, today);
+        const weekend = day.getDay() === 0 || day.getDay() === 6;
         return (
           <div
             key={ymd(day)}
-            className={'dcol' + (isToday ? ' today' : '')}
+            className={'dcol' + (isToday ? ' today' : '') + (weekend ? ' weekend' : '')}
             data-day={ymd(day)}
             data-slots=""
             onClick={(e) => onColumnClick(e, day)}
+            onDragOver={(e) => onColumnDragOver(e, day)}
+            onDragLeave={leave}
+            onDrop={(e) => onColumnDrop(e, day)}
           >
+            {drop?.day === ymd(day) && drop.min !== undefined && stackDrag.item && (
+              <DropPreview min={drop.min} day={day} />
+            )}
             {layoutDay(daySegments(tasks, day)).map((seg) => {
               const key = `${seg.task.id}@${ymd(day)}`;
               return (
@@ -249,10 +321,29 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
                 />
               );
             })}
-            {isToday && <div className="now" style={{ top: (now.getHours() * 60 + now.getMinutes()) * PPM }} />}
+            {/* The now line is solid in today's column and dashed across the rest of the range. */}
+            {showNow && <div className={'now' + (isToday ? '' : ' ghost')} style={{ top: nowTop }} />}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Where the dragged to-do would land: its title, time and length, in its color. */
+function DropPreview({ min, day }: { min: number; day: Date }) {
+  const item = stackDrag.item!;
+  const start = addMin(day, min);
+  return (
+    <div
+      className="drop-preview"
+      aria-hidden="true"
+      style={{ '--c': colorOf(item.colorId), top: min * PPM, height: Math.max(item.minutes * PPM - 2, 18) } as CSSProperties}
+    >
+      <span className="drop-title">{item.title}</span>
+      <span className="drop-time">
+        {hm(start)}–{hm(addMin(start, item.minutes))} · {fmtDuration(item.minutes)}
+      </span>
     </div>
   );
 }
@@ -302,6 +393,7 @@ function Card({ seg, drag, ...handlers }: CardProps) {
         (short ? ' short' : '') +
         (t.done ? ' isdone' : '') +
         (drag ? ' dragging' : '') +
+        (drag?.toStack ? ' to-stack' : '') +
         (seg.endsHere ? '' : ' clipped-end')
       }
       data-id={t.id}
@@ -322,35 +414,11 @@ function Card({ seg, drag, ...handlers }: CardProps) {
         <i style={{ height: `${fill}%` }} />
       </div>
       <DoneButton task={t} />
-      <div className="ctitle">{t.title}</div>
-      <div className="ctime">
-        <span>{label}</span>
-        {total > 0 && <span className="cp">{`${doneCount}/${total}`}</span>}
+      <div className="ctitle">
         {t.label && <LabelTag label={t.label} iconOnly />}
+        <span className="ctitle-text">{t.title}</span>
       </div>
-      {!short && <Memo md={t.description} />}
       {seg.endsHere && <div className="resize" aria-hidden="true" />}
-    </div>
-  );
-}
-
-function Memo({ md }: { md: string }) {
-  const lines = previewLines(md, 10);
-  if (!lines.length) return null;
-  return (
-    <div className="cmemo" aria-hidden="true">
-      {lines.map((l, i) =>
-        l.k === 'task' ? (
-          <div key={i} className={'ml' + (l.done ? ' d' : '')}>
-            <b className={'mbox' + (l.done ? ' on' : '')} />
-            {l.t}
-          </div>
-        ) : (
-          <div key={i} className={'ml' + (l.k === 'head' ? ' h' : '')}>
-            {l.t}
-          </div>
-        ),
-      )}
     </div>
   );
 }

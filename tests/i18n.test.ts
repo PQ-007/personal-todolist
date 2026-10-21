@@ -25,3 +25,26 @@ describe('mnDate', () => {
     expect(mnDate(d, { year: 'numeric', month: 'long' })).toBe('2026 оны 10-р сар');
   });
 });
+
+describe('fmtRange in Mongolian', () => {
+  it('shortens ranges inside one month', async () => {
+    const { fmtRange, setLang } = await import('../src/i18n');
+    setLang('mn');
+    const opts = { year: 'numeric', month: 'long', day: 'numeric' } as const;
+    expect(fmtRange(new Date(2026, 9, 19), new Date(2026, 9, 23), opts)).toBe('2026 оны 10-р сарын 19–23');
+    expect(fmtRange(new Date(2026, 9, 26), new Date(2026, 10, 1), opts)).toBe('2026 оны 10-р сарын 26 – 11-р сарын 1');
+    setLang('en');
+  });
+});
+
+describe('fmtRange in Japanese', () => {
+  it('writes ranges the way Japanese calendars do', async () => {
+    const { fmtRange, setLang } = await import('../src/i18n');
+    setLang('ja');
+    const opts = { year: 'numeric', month: 'long', day: 'numeric' } as const;
+    expect(fmtRange(new Date(2026, 9, 21), new Date(2026, 9, 23), opts)).toBe('2026年10月21日～23日');
+    expect(fmtRange(new Date(2026, 9, 26), new Date(2026, 10, 1), opts)).toBe('2026年10月26日～11月1日');
+    expect(fmtRange(new Date(2026, 11, 28), new Date(2027, 0, 3), opts)).toBe('2026年12月28日～2027年1月3日');
+    setLang('en');
+  });
+});

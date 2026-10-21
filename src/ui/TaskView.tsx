@@ -3,21 +3,18 @@ import { colorOf } from '../domain/colors';
 import { addDays, addMin, hm, sameDay } from '../domain/dates';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
 import type { Task } from '../domain/types';
-import { fmtDate, t } from '../i18n';
+import { fmtDate, fmtDuration, t } from '../i18n';
 import { planner, usePlanner } from '../state/planner';
 import { Dialog } from './Dialog';
 import { Icon } from './Icon';
 import { LabelTag } from './LabelTag';
+import { isTyping, shortcutKey } from './keys';
 import { MarkdownView } from './MarkdownView';
+import { TagChip } from './TagChip';
 
 const DATE: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' };
 
-function duration(t0: Date, t1: Date): string {
-  const min = Math.round((t1.getTime() - t0.getTime()) / 60000);
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return h && m ? t('dur.hm', { h, m }) : h ? t('dur.h', { h }) : t('dur.m', { m });
-}
+const duration = (t0: Date, t1: Date) => fmtDuration(Math.round((t1.getTime() - t0.getTime()) / 60000));
 
 /** "Wednesday, October 21 · 09:30 – 11:00 · 1h 30m", or the all-day / multi-day equivalents. */
 function whenText(task: Task): string {
@@ -46,8 +43,8 @@ export function TaskView({ id, onClose, onEdit }: { id: string; onClose: () => v
   const pct = total ? Math.round((done / total) * 100) : 0;
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if ((e.target as Element).closest('input,textarea,a') || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === 'e') {
+    if (isTyping(e.target) || (e.target as Element).closest('a') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (shortcutKey(e.nativeEvent) === 'e') {
       e.preventDefault();
       onEdit();
     } else if (e.key === 'Delete') {
@@ -63,6 +60,7 @@ export function TaskView({ id, onClose, onEdit }: { id: string; onClose: () => v
         <header className="tv-head">
           <div className="tv-bar">
             {task.label && <LabelTag label={task.label} />}
+            {task.tags?.map((tag) => <TagChip key={tag} tag={tag} />)}
             {task.done && (
               <span className="tv-donetag">
                 <Icon name="check" size={13} />
