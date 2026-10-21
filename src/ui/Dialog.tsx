@@ -6,13 +6,17 @@ interface Props {
   onRequestClose: () => void;
   children: ReactNode;
   className?: string;
+  /** "alertdialog" for warnings that need an answer. */
+  role?: 'dialog' | 'alertdialog';
+  /** Id of the element that explains the dialog (read after its label). */
+  describedBy?: string;
 }
 
 /**
  * A modal built on <dialog>: focus is trapped by the browser, Escape and backdrop clicks ask
  * to close, and focus goes back to whatever was focused before it opened.
  */
-export function Dialog({ label, onRequestClose, children, className }: Props) {
+export function Dialog({ label, onRequestClose, children, className, role, describedBy }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const downOnBackdrop = useRef(false);
   const close = useRef(onRequestClose);
@@ -38,6 +42,8 @@ export function Dialog({ label, onRequestClose, children, className }: Props) {
     <dialog
       ref={ref}
       aria-label={label}
+      aria-describedby={describedBy}
+      role={role === 'alertdialog' ? 'alertdialog' : undefined}
       className={className}
       onCancel={(e) => {
         e.preventDefault();

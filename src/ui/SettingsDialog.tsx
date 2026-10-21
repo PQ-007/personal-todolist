@@ -3,6 +3,7 @@ import { loadGis } from '../data/google/auth';
 import { LANGS, setLang, t, useLang, type Lang } from '../i18n';
 import { planner, usePlanner } from '../state/planner';
 import type { Mode, Theme } from '../state/settings';
+import { confirmDialog } from './confirm';
 import { Dialog } from './Dialog';
 import { Icon } from './Icon';
 import { Rich } from './Rich';
@@ -120,7 +121,12 @@ export function SettingsDialog({ theme, onTheme, onClose }: Props) {
             type="button"
             className="btn danger ghost"
             onClick={() => {
-              if (confirm(t('set.resetConfirm'))) planner.resetDemo();
+              void confirmDialog({
+                title: t('confirm.resetTitle'),
+                message: t('confirm.resetBody'),
+                confirmLabel: t('confirm.reset'),
+                danger: true,
+              }).then((ok) => ok && planner.resetDemo());
             }}
           >
             {t('set.reset')}

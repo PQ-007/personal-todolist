@@ -71,7 +71,6 @@ export const en = {
   'modal.saveHint': 'Ctrl/⌘ + Enter to save',
   'modal.cancel': 'Cancel',
   'modal.save': 'Save',
-  'modal.discard': 'Discard your changes?',
   'modal.needTitle': 'Add a title first.',
 
   'color.blue': 'Blue',
@@ -104,7 +103,6 @@ export const en = {
   'set.step4':
     'Paste the client ID above. For a dedicated task calendar, create a “Tasks” calendar in Google Calendar and paste its ID from Calendar settings → Integrate calendar. Leave it as {primary} to use your main calendar.',
   'set.reset': 'Reset demo data',
-  'set.resetConfirm': 'Replace demo data with the sample week?',
   'set.needClientId': 'Paste your OAuth client ID first.',
   'set.demoReset': 'Demo data reset.',
 
@@ -189,6 +187,13 @@ export const en = {
   'stack.try': 'Try',
   'stack.emptyFiltered': 'Nothing here for this filter.',
   'stack.showAll': 'Show all',
+  'confirm.discardTitle': 'Discard changes?',
+  'confirm.discardBody': 'Your edits to this task haven’t been saved and will be lost.',
+  'confirm.discard': 'Discard',
+  'confirm.keepEditing': 'Keep editing',
+  'confirm.resetTitle': 'Reset demo data?',
+  'confirm.resetBody': 'The demo calendar goes back to the sample week. Anything you changed in demo mode is replaced.',
+  'confirm.reset': 'Reset',
   'toast.dismiss': 'Dismiss',
   'update.available': 'A new version is available.',
   'update.reload': 'Reload',

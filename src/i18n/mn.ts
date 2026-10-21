@@ -72,7 +72,6 @@ export const mn: Messages = {
   'modal.saveHint': 'Ctrl/⌘ + Enter дарж хадгална',
   'modal.cancel': 'Болих',
   'modal.save': 'Хадгалах',
-  'modal.discard': 'Өөрчлөлтөө хаях уу?',
   'modal.needTitle': 'Эхлээд нэр оруулна уу.',
 
   'color.blue': 'Цэнхэр',
@@ -105,7 +104,6 @@ export const mn: Messages = {
   'set.step4':
     'Client ID-г дээрх талбарт буулгана. Ажилд зориулсан тусдаа хуанли ашиглах бол Google Calendar-т “Tasks” хуанли үүсгээд Calendar settings → Integrate calendar хэсгээс ID-г нь хуулна. Үндсэн хуанлиа ашиглах бол {primary} хэвээр үлдээнэ.',
   'set.reset': 'Туршилтын өгөгдлийг шинэчлэх',
-  'set.resetConfirm': 'Туршилтын өгөгдлийг жишээ долоо хоногоор солих уу?',
   'set.needClientId': 'Эхлээд OAuth client ID-гаа буулгана уу.',
   'set.demoReset': 'Туршилтын өгөгдлийг шинэчиллээ.',
 
@@ -190,6 +188,13 @@ export const mn: Messages = {
   'stack.try': 'Жишээ',
   'stack.emptyFiltered': 'Энэ шүүлтэд тохирох зүйл алга.',
   'stack.showAll': 'Бүгдийг харуулах',
+  'confirm.discardTitle': 'Өөрчлөлтийг хаях уу?',
+  'confirm.discardBody': 'Энэ ажилд хийсэн өөрчлөлт хадгалагдаагүй тул устана.',
+  'confirm.discard': 'Хаях',
+  'confirm.keepEditing': 'Үргэлжлүүлэн засах',
+  'confirm.resetTitle': 'Туршилтын өгөгдлийг шинэчлэх үү?',
+  'confirm.resetBody': 'Туршилтын хуанли жишээ долоо хоног руу буцна. Туршилтын горимд хийсэн өөрчлөлтүүд солигдоно.',
+  'confirm.reset': 'Шинэчлэх',
   'toast.dismiss': 'Хаах',
   'update.available': 'Шинэ хувилбар гарсан байна.',
   'update.reload': 'Дахин ачаалах',

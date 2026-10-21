@@ -9,15 +9,18 @@
   --work:#7aa2ff; --personal:#f08fb8;
   --r-sm:6px; --r:10px; --r-lg:14px;
   --pop:0 18px 48px rgba(0,0,0,.45),0 0 0 1px var(--line2);
+  /* sidebars, weekend/odd-cell shading, dialog backdrop */
+  --side:var(--bg); --shade:color-mix(in srgb,var(--panel) 55%,transparent); --backdrop:rgba(6,8,14,.55);
   --hpx:56px;
   --font:system-ui,-apple-system,"Segoe UI","Noto Sans","Noto Sans JP","Hiragino Sans","Yu Gothic UI",sans-serif;
   --mono:ui-monospace,"SF Mono",Consolas,"Noto Sans Mono CJK JP",monospace;
   color-scheme:dark;
 }
 :root[data-theme="light"]{
-  --bg:#fafafa; --panel:#ffffff; --panel2:#f2f3f5; --hover:#ebedf0;
-  --line:#e7e8eb; --line2:#d8dade;
-  --text:#17181c; --muted:#5e636e; --faint:#9a9fa9;
+  --bg:#ffffff; --panel:#ffffff; --panel2:#f1f2f4; --hover:#eceef1;
+  --line:#e6e7eb; --line2:#d5d8de;
+  --text:#16181d; --muted:#5a606b; --faint:#878d98;
+  --side:#f6f7f9; --shade:#f8f9fb; --backdrop:rgba(28,32,44,.28);
   --accent:#3a63f0; --on-accent:#fff; --danger:#d03b3b; --ok:#1f9d5c;
   --work:#2f5fd6; --personal:#c0457a;
   --pop:0 18px 48px rgba(20,24,40,.16),0 0 0 1px var(--line2);
@@ -170,7 +173,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .f-section h2{margin:0 0 6px 8px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .f-list{list-style:none;margin:0;padding:0}
 .f-row{display:grid;grid-template-columns:20px 52px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:42px;padding:6px 8px;border-radius:var(--r);cursor:pointer}
-.f-row:hover{background:var(--panel)}
+.f-row:hover{background:var(--hover)}
 .f-row-time{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .f-row-title{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:14.5px}
 .f-row-meta{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -202,7 +205,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
    ========================================================================== */
 .plan{display:grid;grid-template-columns:300px minmax(0,1fr);min-height:0;position:relative}
 .plan.with-panel{grid-template-columns:300px minmax(0,1fr) 288px}
-.side{display:flex;flex-direction:column;min-height:0;overflow:auto;border-right:1px solid var(--line);background:var(--bg)}
+.side{display:flex;flex-direction:column;min-height:0;overflow:auto;border-right:1px solid var(--line);background:var(--side)}
 .side .mini{border-bottom:1px solid var(--line)}
 /* today's work, narrow: same parts as focus mode, scaled down */
 /* One 16px gutter for everything in the left sidebar, so the calendar, headings and cards line up. */
@@ -236,7 +239,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .focus.compact .f-add{margin-top:18px}
 .focus.compact .f-add-box{height:38px;padding:0 10px}
 .focus.compact .f-add-box input{font-size:13px}
-.planpanel{display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--line);background:var(--bg);overflow:hidden}
+.planpanel{display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--line);background:var(--side);overflow:hidden}
 .planpanel .stack{border-top:0}
 
 /* mini calendar */
@@ -336,7 +339,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .dcol{position:relative;height:calc(24*var(--hpx));border-left:1px solid var(--line);
   background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(color-mix(in srgb,var(--line) 45%,transparent) 1px,transparent 1px);
   background-size:100% var(--hpx),100% var(--hpx);background-position:0 0,0 calc(var(--hpx)/2);cursor:cell}
-.dcol.weekend{background-color:color-mix(in srgb,var(--panel) 55%,transparent)}
+.dcol.weekend{background-color:var(--shade)}
 .dcol.today{background-color:color-mix(in srgb,var(--accent) 4%,transparent)}
 .now{position:absolute;left:0;right:0;height:2px;background:var(--accent);z-index:3;pointer-events:none}
 .now::before{content:"";position:absolute;left:-5px;top:-4px;width:10px;height:10px;border-radius:50%;background:var(--accent)}
@@ -381,8 +384,8 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .month{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:auto;grid-auto-rows:minmax(108px,1fr)}
 .month-dow{position:sticky;top:0;z-index:2;background:var(--bg);padding:8px 10px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);border-left:1px solid var(--line)}
 .mcell{border-left:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px 4px 6px;display:flex;flex-direction:column;gap:2px;min-width:0;cursor:pointer}
-.mcell:hover{background:color-mix(in srgb,var(--panel) 70%,transparent)}
-.mcell.weekend{background:color-mix(in srgb,var(--panel) 50%,transparent)}
+.mcell:hover{background:color-mix(in srgb,var(--hover) 70%,transparent)}
+.mcell.weekend{background:var(--shade)}
 .mcell.out .mnum,.mcell.out .mchip{opacity:.45}
 .mcell.sel{box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent) 55%,transparent)}
 .mnum{align-self:flex-start;border:0;background:transparent;font-size:12.5px;font-weight:600;padding:2px 7px;min-width:26px;height:26px;border-radius:99px;color:var(--text);font-variant-numeric:tabular-nums}
@@ -404,7 +407,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
    ========================================================================== */
 dialog{border:0;background:var(--panel);color:var(--text);border-radius:var(--r-lg);padding:0;width:min(660px,94vw);max-height:90vh;box-shadow:var(--pop)}
 dialog[open]{display:flex;flex-direction:column}
-dialog::backdrop{background:rgba(6,8,14,.55);backdrop-filter:blur(2px)}
+dialog::backdrop{background:var(--backdrop);backdrop-filter:blur(2px)}
 .mwrap{display:flex;flex-direction:column;min-height:0;padding:18px 22px 16px;gap:12px}
 .mhead{display:flex;align-items:center;gap:14px}
 .swatches{display:flex;gap:7px;flex:1}
@@ -495,6 +498,22 @@ dialog.tview{width:min(1040px,94vw);min-height:min(600px,86vh);max-height:90vh;o
 .setlegend{font-size:12.5px;color:var(--muted);padding:0;float:left;flex:0 0 100%}
 .steps{font-size:12.5px;color:var(--muted);margin:0;padding-left:18px;line-height:1.6}
 .steps code{background:var(--bg);padding:0 4px;border-radius:4px}
+
+/* warning / confirmation dialog */
+dialog.confirm{width:min(440px,92vw)}
+.cf{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;padding:22px 22px 18px}
+.cf-icon{grid-row:span 2;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.cf.danger .cf-icon{color:var(--danger);background:color-mix(in srgb,var(--danger) 14%,transparent)}
+.cf-text h2{margin:8px 0 0;font-size:16.5px;line-height:1.35;font-weight:600}
+.cf-text p{margin:6px 0 0;color:var(--muted);font-size:14px;line-height:1.55}
+.cf-actions{grid-column:1 / -1;display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.cf-actions .btn{height:36px;padding:0 16px;font-size:14px}
+.btn.danger-solid{background:var(--danger);border-color:transparent;color:#fff;font-weight:600}
+.btn.danger-solid:hover{background:color-mix(in srgb,var(--danger) 88%,#000)}
+@media (max-width:480px){
+  .cf-actions{flex-direction:column-reverse}
+  .cf-actions .btn{width:100%}
+}
 
 /* command palette */
 dialog.palette{width:min(620px,94vw);margin:12vh auto auto;max-height:70vh;overflow:hidden}
@@ -598,3 +617,21 @@ dialog.palette{width:min(620px,94vw);margin:12vh auto auto;max-height:70vh;overf
   .tv-notes{font-size:16px}
   .tv-foot{padding:10px 12px max(12px,env(safe-area-inset-bottom)) 22px}
 }
+
+/* ==========================================================================
+   Light theme: tinted cards with text in a deep shade of the task color (instead of
+   faint pastels), and a hairline plus soft shadow so white cards stand off the grey sidebars.
+   ========================================================================== */
+:root[data-theme="light"] .card,:root[data-theme="light"] .chip,:root[data-theme="light"] .mchip.allday,:root[data-theme="light"] .f-allday li{
+  background:color-mix(in srgb,var(--c) 20%,#fff);color:color-mix(in srgb,var(--c) 42%,#16181d)}
+:root[data-theme="light"] .card:hover,:root[data-theme="light"] .chip:hover{background:color-mix(in srgb,var(--c) 28%,#fff)}
+:root[data-theme="light"] .spine{background:color-mix(in srgb,var(--c) 40%,transparent)}
+:root[data-theme="light"] .card.isdone,:root[data-theme="light"] .chip.done{opacity:1;filter:none;background:#fff;color:var(--faint);box-shadow:inset 0 0 0 1px var(--line)}
+:root[data-theme="light"] .card.isdone .spine{background:var(--line2)}
+:root[data-theme="light"] .card.isdone .spine i{background:var(--line2)}
+:root[data-theme="light"] .card.isdone:hover{background:var(--shade)}
+:root[data-theme="light"] .f-card,:root[data-theme="light"] .scard,:root[data-theme="light"] .padd,:root[data-theme="light"] .f-add-box{
+  box-shadow:0 0 0 1px var(--line),0 1px 2px rgba(20,24,40,.05)}
+:root[data-theme="light"] .padd:focus-within,:root[data-theme="light"] .f-add-box:focus-within{box-shadow:0 0 0 1.5px var(--accent)}
+:root[data-theme="light"] .mode.on{box-shadow:0 1px 2px rgba(20,24,40,.12),0 0 0 1px var(--line2)}
+:root[data-theme="light"] .tv-head{background:linear-gradient(180deg,color-mix(in srgb,var(--c) 12%,#fff),#fff)}

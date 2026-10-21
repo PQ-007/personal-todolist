@@ -72,7 +72,6 @@ export const ja: Messages = {
   'modal.saveHint': 'Ctrl/⌘ + Enter で保存',
   'modal.cancel': 'キャンセル',
   'modal.save': '保存',
-  'modal.discard': '変更を破棄しますか？',
   'modal.needTitle': 'タイトルを入力してください。',
 
   'color.blue': '青',
@@ -105,7 +104,6 @@ export const ja: Messages = {
   'set.step4':
     '上の欄にクライアント ID を貼り付けます。タスク専用のカレンダーを使う場合は、Google カレンダーで「Tasks」カレンダーを作成し、カレンダーの設定 →「カレンダーの統合」から ID を貼り付けます。メインのカレンダーを使う場合は {primary} のままにします。',
   'set.reset': 'デモデータをリセット',
-  'set.resetConfirm': 'デモデータをサンプルの週に置き換えますか？',
   'set.needClientId': '先に OAuth クライアント ID を貼り付けてください。',
   'set.demoReset': 'デモデータをリセットしました。',
 
@@ -190,6 +188,13 @@ export const ja: Messages = {
   'stack.try': '例',
   'stack.emptyFiltered': 'この絞り込みに当てはまるものはありません。',
   'stack.showAll': 'すべて表示',
+  'confirm.discardTitle': '変更を破棄しますか？',
+  'confirm.discardBody': 'このタスクへの変更は保存されておらず、失われます。',
+  'confirm.discard': '破棄',
+  'confirm.keepEditing': '編集を続ける',
+  'confirm.resetTitle': 'デモデータをリセットしますか？',
+  'confirm.resetBody': 'デモのカレンダーはサンプルの週に戻ります。デモモードで変更した内容は置き換えられます。',
+  'confirm.reset': 'リセット',
   'toast.dismiss': '閉じる',
   'update.available': '新しいバージョンがあります。',
   'update.reload': '再読み込み',

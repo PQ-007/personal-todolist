@@ -16,6 +16,7 @@ import {
 } from '../domain/when';
 import { t as tr } from '../i18n';
 import { planner } from '../state/planner';
+import { confirmDialog } from './confirm';
 import { Dialog } from './Dialog';
 import { Icon } from './Icon';
 import { isImeKey } from './ime';
@@ -84,7 +85,14 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   };
 
   const requestClose = () => {
-    if (!dirty || confirm(tr('modal.discard'))) onClose();
+    if (!dirty) return onClose();
+    void confirmDialog({
+      title: tr('confirm.discardTitle'),
+      message: tr('confirm.discardBody'),
+      confirmLabel: tr('confirm.discard'),
+      cancelLabel: tr('confirm.keepEditing'),
+      danger: true,
+    }).then((ok) => ok && onClose());
   };
 
   const save = () => {

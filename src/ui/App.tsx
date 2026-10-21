@@ -8,6 +8,7 @@ import { fmtDate, LANGS, setLang, t, useLang, type Lang } from '../i18n';
 import { planner, usePlanner } from '../state/planner';
 import { loadTheme, saveTheme, type Theme } from '../state/settings';
 import { CommandPalette, type Command } from './CommandPalette';
+import { ConfirmHost } from './confirm';
 import { ContextMenu, type MenuEntry, type MenuState } from './ContextMenu';
 import { FocusView, QUICK_ADD_ID } from './FocusView';
 import { isTyping, shortcutKey } from './keys';
@@ -294,6 +295,7 @@ export function App() {
       {settingsOpen && <SettingsDialog theme={theme} onTheme={setTheme} onClose={() => setSettingsOpen(false)} />}
       {paletteOpen && <CommandPalette commands={commands()} onClose={closePalette} />}
       {menu && <ContextMenu menu={menu} onClose={closeMenu} />}
+      <ConfirmHost />
       <Toast />
       <UpdatePrompt />
     </div>
