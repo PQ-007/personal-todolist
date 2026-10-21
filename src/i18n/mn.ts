@@ -103,6 +103,13 @@ export const mn: Messages = {
   'set.step3': 'Web application төрлийн OAuth client ID үүсгээд энэ сайтын хаягийг ({origin}) Authorized JavaScript origins хэсэгт нэмнэ.',
   'set.step4':
     'Client ID-г дээрх талбарт буулгана. Ажилд зориулсан тусдаа хуанли ашиглах бол Google Calendar-т “Tasks” хуанли үүсгээд Calendar settings → Integrate calendar хэсгээс ID-г нь хуулна. Үндсэн хуанлиа ашиглах бол {primary} хэвээр үлдээнэ.',
+  'set.demoDesc': 'Зөвхөн энэ хөтөчид хадгалагдана',
+  'set.googleDesc': 'Google Calendar-т хадгалагдаж, бүх төхөөрөмжид синк хийгдэнэ',
+  'set.connected': 'Холбогдсон',
+  'set.notConnected': 'Холбогдоогүй',
+  'set.calendarHint': '“primary” бол таны үндсэн хуанли.',
+  'set.guide': 'Тохируулах заавар',
+  'set.done': 'Болсон',
   'set.reset': 'Туршилтын өгөгдлийг шинэчлэх',
   'set.needClientId': 'Эхлээд OAuth client ID-гаа буулгана уу.',
   'set.demoReset': 'Туршилтын өгөгдлийг шинэчиллээ.',

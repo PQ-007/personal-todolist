@@ -103,6 +103,13 @@ export const ja: Messages = {
   'set.step3': '種類「ウェブ アプリケーション」の OAuth クライアント ID を作成し、このサイトのアドレス（{origin}）を「承認済みの JavaScript 生成元」に追加します。',
   'set.step4':
     '上の欄にクライアント ID を貼り付けます。タスク専用のカレンダーを使う場合は、Google カレンダーで「Tasks」カレンダーを作成し、カレンダーの設定 →「カレンダーの統合」から ID を貼り付けます。メインのカレンダーを使う場合は {primary} のままにします。',
+  'set.demoDesc': 'このブラウザにのみ保存されます',
+  'set.googleDesc': 'Google カレンダーに保存され、すべての端末で同期されます',
+  'set.connected': '接続済み',
+  'set.notConnected': '未接続',
+  'set.calendarHint': '「primary」はメインのカレンダーです。',
+  'set.guide': '設定ガイド',
+  'set.done': '完了',
   'set.reset': 'デモデータをリセット',
   'set.needClientId': '先に OAuth クライアント ID を貼り付けてください。',
   'set.demoReset': 'デモデータをリセットしました。',

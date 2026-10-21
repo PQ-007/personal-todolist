@@ -102,6 +102,13 @@ export const en = {
   'set.step3': 'Create an OAuth client ID of type Web application and add this site’s address ({origin}) under authorized JavaScript origins.',
   'set.step4':
     'Paste the client ID above. For a dedicated task calendar, create a “Tasks” calendar in Google Calendar and paste its ID from Calendar settings → Integrate calendar. Leave it as {primary} to use your main calendar.',
+  'set.demoDesc': 'Saved in this browser only',
+  'set.googleDesc': 'Lives in your Google Calendar and syncs across devices',
+  'set.connected': 'Connected',
+  'set.notConnected': 'Not connected',
+  'set.calendarHint': '“primary” is your main calendar.',
+  'set.guide': 'Setup guide',
+  'set.done': 'Done',
   'set.reset': 'Reset demo data',
   'set.needClientId': 'Paste your OAuth client ID first.',
   'set.demoReset': 'Demo data reset.',
