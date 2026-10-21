@@ -21,7 +21,8 @@
   --line:#e6e7eb; --line2:#d5d8de;
   --text:#16181d; --muted:#5a606b; --faint:#878d98;
   --side:#f6f7f9; --shade:#f8f9fb; --backdrop:rgba(28,32,44,.28);
-  --accent:#3a63f0; --on-accent:#fff; --danger:#d03b3b; --ok:#1f9d5c;
+  /* deep periwinkle: same hue family as the dark accent, 5.5:1 on white, 5.1:1 on the sidebars */
+  --accent:#4a5fd1; --on-accent:#fff; --danger:#d03b3b; --ok:#1f9d5c;
   --work:#2f5fd6; --personal:#c0457a;
   --pop:0 18px 48px rgba(20,24,40,.16),0 0 0 1px var(--line2);
   color-scheme:light;
