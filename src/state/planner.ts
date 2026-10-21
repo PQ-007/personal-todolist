@@ -174,6 +174,19 @@ export class Planner {
     if (moved) void this.refresh();
   }
 
+  /**
+   * Tasks in any range, for overviews such as the mini calendar's busy days. Unlike `refresh`
+   * it changes nothing on screen, and a failure just returns nothing (no toast).
+   */
+  async peek(from: Date, to: Date): Promise<Task[]> {
+    if (this.state.settings.mode === 'google' && !hasToken()) return [];
+    try {
+      return await this.store.list(from, to);
+    } catch {
+      return [];
+    }
+  }
+
   setDay(day: Date) {
     this.navigate({ day });
   }

@@ -18,7 +18,6 @@ import type { Task } from '../domain/types';
 import { planner, usePlanner } from '../state/planner';
 import { CREATE_SNAP_MIN, HPX, PPM, SNAP_MIN } from './constants';
 import { isStackDrag, overStack, stackDrag } from './dnd';
-import { DoneButton } from './DoneButton';
 import { useNow } from './hooks';
 import { LabelTag } from './LabelTag';
 
@@ -413,7 +412,6 @@ function Card({ seg, drag, ...handlers }: CardProps) {
       <div className="spine">
         <i style={{ height: `${fill}%` }} />
       </div>
-      <DoneButton task={t} />
       <div className="ctitle">
         {t.label && <LabelTag label={t.label} iconOnly />}
         <span className="ctitle-text">{t.title}</span>

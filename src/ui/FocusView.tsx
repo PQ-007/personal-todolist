@@ -64,6 +64,7 @@ export function FocusView({ onEdit, onMenu, onTaskMenu, compact }: Props) {
   const now = useNow();
   const [expanded, setExpanded] = useState<string | null>(null);
   const isToday = sameDay(day, now);
+  const relative = Math.abs(dayDiff(now, day)) <= 1;
   const tasks = all.filter((task) => matchesFilter(task, filter) && overlapsDay(task, day));
   const allDay = tasks.filter((task) => task.allDay);
   const open = tasks.filter((task) => !task.allDay && !task.done).sort(byStart);
@@ -95,7 +96,8 @@ export function FocusView({ onEdit, onMenu, onTaskMenu, compact }: Props) {
       <header className="f-head">
         <h1>{dayName(day, now)}</h1>
         <p className="f-date">
-          {fmtDate(day, { weekday: compact ? 'short' : 'long', month: 'long', day: 'numeric' })}
+          {/* The heading is already the weekday unless it says Today, Tomorrow or Yesterday. */}
+          {fmtDate(day, relative ? { weekday: compact ? 'short' : 'long', month: 'long', day: 'numeric' } : { month: 'long', day: 'numeric' })}
           {total > 0 && <span className="f-count">{t('panel.progress', { done: done.length, total })}</span>}
         </p>
         {total > 0 && (

@@ -203,20 +203,28 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .side{display:flex;flex-direction:column;min-height:0;overflow:auto;border-right:1px solid var(--line);background:var(--bg)}
 .side .mini{border-bottom:1px solid var(--line)}
 /* today's work, narrow: same parts as focus mode, scaled down */
-.focus.compact{width:auto;margin:0;padding:16px 14px 32px}
+/* One 16px gutter for everything in the left sidebar, so the calendar, headings and cards line up. */
+.side,.planpanel{--gutter:16px}
+.side .mini{padding:14px var(--gutter) 12px}
+.side .mini-head h2{margin-left:0}
+/* The chevron is drawn 6px inside its icon box; pull the button out so the glyph meets the gutter. */
+.side .mini-head .iconbtn:last-child{margin-right:-12px}
+.focus.compact{width:auto;margin:0;padding:16px var(--gutter) 32px}
 .focus.compact .f-head h1{font-size:20px}
 .focus.compact .f-date{font-size:12.5px;margin-top:2px}
 .focus.compact .f-bar{margin-top:10px}
 .focus.compact .f-allday{margin-top:10px}
 .focus.compact .f-allday li{font-size:12px;padding:3px 9px 3px 7px}
-.focus.compact .f-card.hero{margin-top:16px;padding:14px 14px 12px 16px}
+.focus.compact .f-card.hero,.focus.compact .f-card.f-empty{margin-top:16px;padding:14px 16px}
 .focus.compact .f-card.hero::before{top:12px;bottom:12px}
 .focus.compact .f-card-meta{font-size:12px;gap:4px 8px}
 .focus.compact .f-card-title{font-size:17px;margin-top:6px}
 .focus.compact .f-notes{font-size:13.5px;margin-top:10px;max-height:34vh}
 .focus.compact .f-actions{margin-top:12px}
 .focus.compact .f-actions .btn{height:32px;font-size:13px;padding:0 12px}
-.focus.compact .f-card.inline{padding:12px 12px 10px 14px}
+.focus.compact .f-card.inline{padding:12px 14px}
+.focus.compact .f-empty{font-size:13px}
+.focus.compact .f-empty-title{font-size:15px}
 .focus.compact .f-card.inline .f-card-title{font-size:15px}
 .focus.compact .f-section{margin-top:20px}
 .focus.compact .f-section h2{margin-left:6px}
@@ -230,25 +238,32 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .planpanel .stack{border-top:0}
 
 /* mini calendar */
-.mini{padding:14px 12px 10px}
-.mini-head{display:flex;align-items:center;gap:2px;margin-bottom:4px}
-.mini-head h2{flex:1;margin:0 0 0 6px;font-size:13px;font-weight:600}
+.mini{padding:14px 12px 12px}
+.mini-head{display:flex;align-items:center;gap:0;margin-bottom:8px}
+.mini-head h2{flex:1;margin:0;font-size:14px;font-weight:600;letter-spacing:-.005em}
 .mini-head .iconbtn{width:28px;height:28px}
-.mini-grid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:1px}
-.mini-dow{font-size:11px;color:var(--faint);text-align:center;padding:2px 0 4px}
-.mini-day{border:0;background:transparent;padding:1px 0;display:grid;place-items:center;font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;border-radius:0}
-.mini-day span{width:26px;height:26px;display:grid;place-items:center;border-radius:50%}
+.mini-grid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:2px}
+.mini-dow{font-size:11px;font-weight:500;color:var(--faint);text-align:center;padding:0 0 6px}
+/* Each day is a 30px circle centered in its column; the band for the days on screen runs behind. */
+.mini-day{position:relative;height:32px;border:0;background:transparent;padding:0;display:grid;place-items:center;font-size:12.5px;color:var(--text);font-variant-numeric:tabular-nums}
+.mini-day span{position:relative;width:30px;height:30px;display:grid;place-items:center;border-radius:50%;transition:background .1s}
 .mini-day:hover span{background:var(--hover)}
-.mini-day.out{color:var(--faint)}
-.mini-day.shown{background:color-mix(in srgb,var(--accent) 12%,transparent)}
-.mini-day.shown.first{border-top-left-radius:7px;border-bottom-left-radius:7px}
-.mini-day.shown.last{border-top-right-radius:7px;border-bottom-right-radius:7px}
-.mini-day.sel span{box-shadow:inset 0 0 0 1.5px var(--accent)}
-.mini-day.today span{background:var(--accent);color:var(--on-accent);font-weight:600}
+.mini-day.weekend{color:var(--muted)}
+.mini-day.out{color:var(--faint);opacity:.7}
+.mini-day.shown::before{content:"";position:absolute;inset:1px 0;background:color-mix(in srgb,var(--accent) 13%,transparent)}
+.mini-day.shown.first::before{left:3px;border-radius:15px 0 0 15px}
+.mini-day.shown.last::before{right:3px;border-radius:0 15px 15px 0}
+.mini-day.shown.first.last::before{border-radius:15px}
+/* a dot under the number marks a day with tasks */
+.mini-day.busy span::after{content:"";position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--muted)}
+.mini-day.sel span{color:var(--accent);font-weight:600;box-shadow:inset 0 0 0 1.5px var(--accent)}
+.mini-day.sel.busy span::after{background:var(--accent)}
+.mini-day.today span{background:var(--accent);color:var(--on-accent);font-weight:600;box-shadow:none}
+.mini-day.today.busy span::after{background:var(--on-accent)}
 
 /* to-do stack */
 .stack{display:flex;flex-direction:column;flex:1;min-height:0;border-top:1px solid var(--line);transition:background .15s,box-shadow .15s}
-.stack-head{display:flex;align-items:center;gap:8px;padding:14px 16px 6px}
+.stack-head{display:flex;align-items:center;gap:8px;padding:14px var(--gutter,16px) 6px}
 .stack-head h2{margin:0;font-size:13px;font-weight:600}
 .stack-count{font-size:11.5px;font-weight:600;color:var(--muted);background:var(--panel2);border-radius:99px;padding:0 7px}
 .padd{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border-radius:8px;color:var(--faint);background:var(--panel);box-shadow:0 0 0 1px var(--line)}
@@ -256,9 +271,9 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .padd input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-size:13px}
 .padd input:focus{outline:none}
 .padd input::placeholder{color:var(--faint)}
-.stack-add{margin:4px 12px 8px}
-.stack-tags{display:flex;flex-wrap:wrap;gap:4px;padding:0 12px 8px}
-.stack-list{list-style:none;margin:0;padding:2px 12px 12px;overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:4px}
+.stack-add{margin:4px var(--gutter,16px) 8px}
+.stack-tags{display:flex;flex-wrap:wrap;gap:4px;padding:0 var(--gutter,16px) 8px}
+.stack-list{list-style:none;margin:0;padding:2px var(--gutter,16px) 12px;overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:4px}
 .scard{position:relative;display:grid;grid-template-columns:12px minmax(0,1fr) auto 26px;align-items:center;gap:6px;padding:8px 2px 8px 6px;border-radius:8px;background:var(--panel);box-shadow:inset 3px 0 0 var(--c);cursor:grab;user-select:none}
 .scard:hover{background:var(--hover)}
 .scard:active{cursor:grabbing}
@@ -277,11 +292,11 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .scard:hover .scard-more,.scard-more:focus-visible{opacity:1}
 @media (hover:none){.scard-more,.scard-grip{opacity:1}}
 .scard-tags{grid-column:2 / 5;display:flex;flex-wrap:wrap;gap:3px}
-.stack-empty{padding:12px 16px}
+.stack-empty{padding:12px var(--gutter,16px)}
 .pempty{color:var(--muted);font-size:13px}
 .pempty p{margin:0}
 .pempty-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px!important}
-.stack-drop{display:none;margin:0 12px 12px;padding:14px;border:1.5px dashed var(--accent);border-radius:var(--r);color:var(--accent);font-size:13px;text-align:center}
+.stack-drop{display:none;margin:0 var(--gutter,16px) 12px;padding:14px;border:1.5px dashed var(--accent);border-radius:var(--r);color:var(--accent);font-size:13px;text-align:center}
 .stack.drop-target{background:color-mix(in srgb,var(--accent) 7%,var(--bg));box-shadow:inset 0 0 0 2px var(--accent)}
 .stack.drop-target .stack-drop{display:block}
 
@@ -319,27 +334,30 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .now.ghost::before{display:none}
 
 /* event cards */
-.card{position:absolute;z-index:2;overflow:hidden;cursor:pointer;border-radius:6px;padding:4px 8px 4px 10px;background:color-mix(in srgb,var(--c) 18%,var(--bg));user-select:none;-webkit-user-select:none}
+/* A card is just its name, centered, with the same space on both sides of the colored edge. */
+.card{position:absolute;z-index:2;overflow:hidden;cursor:pointer;border-radius:6px;padding:4px 10px 4px 13px;display:flex;align-items:center;container-type:size;background:color-mix(in srgb,var(--c) 18%,var(--bg));user-select:none;-webkit-user-select:none}
 .card:hover{background:color-mix(in srgb,var(--c) 26%,var(--bg))}
 .card:focus-visible{outline:2px solid var(--accent);outline-offset:1px;z-index:8}
 .card.dragging{z-index:9;opacity:.92;box-shadow:0 10px 28px rgba(0,0,0,.4);cursor:grabbing;transition:none}
 .card.to-stack{opacity:.5}
 .spine{position:absolute;left:0;top:0;bottom:0;width:3px;background:color-mix(in srgb,var(--c) 35%,transparent)}
 .spine i{display:block;width:100%;background:var(--c)}
-.card .donebtn{position:absolute;right:5px;top:5px;width:14px;height:14px}
 /* Cards show just the name; long names wrap on taller cards. */
-.ctitle{display:flex;align-items:flex-start;gap:5px;font-weight:600;font-size:12.5px;line-height:1.35;padding-right:18px;min-width:0}
-.ctitle-text{min-width:0;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4}
-.ctitle .lbl.icon-only{flex:none;margin-top:2px}
+/* The name grows with its card (cqh/cqw are % of the card's inner height/width): about 13px for
+   a one-hour card, up to 17px in long blocks, held back by width in narrow week columns and
+   side-by-side cards. */
+.ctitle{display:flex;align-items:center;gap:.4em;width:100%;font-weight:600;font-size:clamp(11.5px,min(28cqh,8cqw),17px);line-height:1.3;min-width:0;max-height:100%}
+.ctitle-text{min-width:0;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6}
+/* The label icon follows the name's size (the badge's own 12px would keep it tiny). */
+.ctitle .lbl.icon-only{flex:none;font-size:inherit}
+.ctitle .lbl.icon-only .icon{width:.9em;height:.9em}
 .card.short .ctitle-text{display:block;white-space:nowrap;text-overflow:ellipsis}
-.card.short .ctitle .lbl.icon-only{margin-top:1px}
 /* Finished tasks fade to grey so open work stands out; hovering brings them back a little. */
 .card.isdone{opacity:.45;filter:saturate(.15)}
 .card.isdone:hover,.card.isdone:focus-visible,.card.isdone.dragging{opacity:.8}
 .card.isdone .ctitle{text-decoration:line-through}
 .card.short{padding-top:1px;padding-bottom:1px}
-.card.short .ctitle{font-size:11.5px;line-height:1.35}
-.card.short .donebtn{top:2px;width:12px;height:12px}
+.card.short .ctitle{font-size:clamp(11px,min(52cqh,8cqw),13px);line-height:1.3}
 .resize{position:absolute;left:0;right:0;bottom:0;height:7px;cursor:ns-resize;touch-action:none}
 .card.clipped-end .resize{display:none}
 .drop-preview{position:absolute;left:2px;right:2px;z-index:4;pointer-events:none;border-radius:6px;border:1.5px dashed var(--c);background:color-mix(in srgb,var(--c) 20%,transparent);padding:3px 8px;display:flex;flex-direction:column;overflow:hidden}
