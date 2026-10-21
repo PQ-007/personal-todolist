@@ -10,14 +10,15 @@ import type { MenuEntry } from './ContextMenu';
 export function stackItemMenu(item: StackItem, onEditText?: () => void): MenuEntry[] {
   const today = new Date();
   return [
-    { label: t('stack.scheduleToday'), icon: 'day', onSelect: () => void planner.scheduleItemOn(item.id, today) },
+    { label: t('stack.scheduleToday'), icon: 'clock', onSelect: () => void planner.scheduleItemOn(item.id, today) },
     { label: t('stack.scheduleTomorrow'), icon: 'arrow-right', onSelect: () => void planner.scheduleItemOn(item.id, addDays(today, 1)) },
     { kind: 'separator' },
     {
       kind: 'chips',
       label: t('stack.length'),
       value: String(item.minutes),
-      options: LENGTHS.map((m) => ({ id: String(m), label: fmtDuration(m) })),
+      // h:mm stays short in every language ("1 цаг 30 мин" would wrap); the full length is the tooltip.
+      options: LENGTHS.map((m) => ({ id: String(m), label: `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`, title: fmtDuration(m) })),
       onSelect: (m) => planner.updateStackItem(item.id, { minutes: Number(m) }),
     },
     {

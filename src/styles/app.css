@@ -68,10 +68,12 @@ kbd{font:500 11px/1 var(--font);color:var(--faint);border:1px solid var(--line2)
 .lbl.work{color:var(--work);background:color-mix(in srgb,var(--work) 13%,transparent)}
 .lbl.personal{color:var(--personal);background:color-mix(in srgb,var(--personal) 13%,transparent)}
 .lbl.icon-only{padding:0;background:transparent}
-.tag{--h:220;display:inline-flex;align-items:center;border:0;border-radius:99px;padding:0 7px;font-size:11.5px;font-weight:500;line-height:1.6;white-space:nowrap;color:hsl(var(--h) 70% 74%);background:hsl(var(--h) 55% 55% / .14)}
-:root[data-theme="light"] .tag{color:hsl(var(--h) 60% 34%);background:hsl(var(--h) 70% 50% / .1)}
+/* Each tag keeps its own hue (--h, from the tag's name) and blends toward a neighbouring hue. */
+.tag{--h:220;display:inline-flex;align-items:center;border:0;border-radius:99px;padding:0 8px;font-size:11.5px;font-weight:500;line-height:1.6;white-space:nowrap;color:hsl(var(--h) 75% 78%);
+  background:linear-gradient(120deg,hsl(var(--h) 65% 55% / .3),hsl(calc(var(--h) + 45) 65% 55% / .14))}
+:root[data-theme="light"] .tag{color:hsl(var(--h) 60% 32%);background:linear-gradient(120deg,hsl(var(--h) 75% 55% / .2),hsl(calc(var(--h) + 45) 75% 55% / .08))}
 button.tag{cursor:pointer}
-button.tag:hover{background:hsl(var(--h) 55% 55% / .26)}
+button.tag:hover{background:linear-gradient(120deg,hsl(var(--h) 65% 55% / .45),hsl(calc(var(--h) + 45) 65% 55% / .24))}
 .tag.on{box-shadow:inset 0 0 0 1.5px currentColor}
 .tag.all{--h:0;color:var(--muted);background:var(--panel2)}
 .tag.all.on{color:var(--text)}
@@ -251,8 +253,9 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .mini-day.weekend{color:var(--muted)}
 .mini-day.out{color:var(--faint);opacity:.7}
 .mini-day.shown::before{content:"";position:absolute;inset:1px 0;background:color-mix(in srgb,var(--accent) 13%,transparent)}
-.mini-day.shown.first::before{left:3px;border-radius:15px 0 0 15px}
-.mini-day.shown.last::before{right:3px;border-radius:0 15px 15px 0}
+/* The band's ends are centred on the first and last circles, so both caps hug them equally. */
+.mini-day.shown.first::before{left:calc(50% - 15px);border-radius:15px 0 0 15px}
+.mini-day.shown.last::before{right:calc(50% - 15px);border-radius:0 15px 15px 0}
 .mini-day.shown.first.last::before{border-radius:15px}
 /* a dot under the number marks a day with tasks */
 .mini-day.busy span::after{content:"";position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--muted)}
@@ -274,8 +277,8 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .stack-add{margin:4px var(--gutter,16px) 8px}
 .stack-tags{display:flex;flex-wrap:wrap;gap:4px;padding:0 var(--gutter,16px) 8px}
 .stack-list{list-style:none;margin:0;padding:2px var(--gutter,16px) 12px;overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:4px}
-.scard{position:relative;display:grid;grid-template-columns:12px minmax(0,1fr) auto 26px;align-items:center;gap:6px;padding:8px 2px 8px 6px;border-radius:8px;background:var(--panel);box-shadow:inset 3px 0 0 var(--c);cursor:grab;user-select:none}
-.scard:hover{background:var(--hover)}
+.scard{position:relative;display:grid;grid-template-columns:12px minmax(0,1fr) auto 26px;align-items:center;gap:6px;padding:8px 2px 8px 6px;border-radius:8px;background:linear-gradient(var(--c),var(--c)) left/3px 100% no-repeat,var(--panel);cursor:grab;user-select:none}
+.scard:hover{background:linear-gradient(var(--c),var(--c)) left/3px 100% no-repeat,var(--hover)}
 .scard:active{cursor:grabbing}
 .scard.dragging{opacity:.4}
 .scard.drop-before::before,.scard.drop-after::after{content:"";position:absolute;left:4px;right:4px;height:2px;border-radius:2px;background:var(--accent)}
@@ -292,7 +295,14 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .scard:hover .scard-more,.scard-more:focus-visible{opacity:1}
 @media (hover:none){.scard-more,.scard-grip{opacity:1}}
 .scard-tags{grid-column:2 / 5;display:flex;flex-wrap:wrap;gap:3px}
-.stack-empty{padding:12px var(--gutter,16px)}
+.stack-empty{display:flex;flex-direction:column;align-items:center;gap:8px;margin:4px var(--gutter,16px) 16px;padding:28px 18px 22px;border:1.5px dashed var(--line2);border-radius:var(--r);text-align:center;color:var(--muted);font-size:13px;transition:border-color .15s,background .15s}
+.stack-empty .icon{color:var(--faint)}
+.stack-empty p{margin:0;line-height:1.55}
+.stack-empty-title{font-size:14px;font-weight:600;color:var(--text)}
+.stack-example{display:inline-block;max-width:100%;margin-top:6px;padding:5px 12px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);color:var(--text);font-size:12.5px;line-height:1.5;text-align:center}
+.stack-example:hover{border-color:var(--accent)}
+.stack-example span{color:var(--faint);font-size:11.5px;margin-right:6px}
+.stack.drop-target .stack-empty{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .pempty{color:var(--muted);font-size:13px}
 .pempty p{margin:0}
 .pempty-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px!important}
@@ -503,7 +513,7 @@ dialog.palette{width:min(620px,94vw);margin:12vh auto auto;max-height:70vh;overf
 .pal-empty{padding:18px;color:var(--muted);text-align:center}
 
 /* context menu */
-.ctxmenu{position:fixed;z-index:60;min-width:232px;padding:5px;background:var(--panel);border-radius:12px;box-shadow:var(--pop);display:flex;flex-direction:column}
+.ctxmenu{position:fixed;z-index:60;min-width:248px;padding:5px;background:var(--panel);border-radius:12px;box-shadow:var(--pop);display:flex;flex-direction:column}
 .ctxitem{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:10px;border:0;background:transparent;text-align:left;padding:6px 10px;border-radius:7px;font-size:13.5px;color:var(--text)}
 .ctxitem:hover:not(:disabled),.ctxitem:focus-visible{background:var(--hover);outline:none}
 .ctxitem:disabled{color:var(--faint);cursor:default}
@@ -512,14 +522,16 @@ dialog.palette{width:min(620px,94vw);margin:12vh auto auto;max-height:70vh;overf
 .ctxitem kbd{border:0;padding:0;font-size:12px}
 .ctxcheck{display:grid;place-items:center;width:16px;color:var(--accent)}
 .ctxsep{height:1px;background:var(--line);margin:4px 6px}
-.ctxswatches{display:flex;gap:8px;padding:6px 10px 4px}
+/* Colors and chips share the menu's width in equal columns, so the rows line up. */
+.ctxswatches{display:grid;grid-template-columns:repeat(var(--n),1fr);justify-items:center;padding:8px 10px}
 .ctxsw{width:20px;height:20px;border-radius:50%;border:0;padding:0;background:var(--c)}
 .ctxsw:hover{transform:scale(1.12)}
 .ctxsw:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 .ctxsw.on{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--c)}
-.ctxchips{display:flex;align-items:center;gap:4px;padding:6px 10px 4px}
-.ctxchips-label{flex:1;font-size:12.5px;color:var(--muted);margin-right:6px}
-.ctxchip{min-width:26px;height:26px;border:1px solid var(--line2);background:transparent;border-radius:6px;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--text);padding:0 6px}
+.ctxchips{display:flex;flex-direction:column;gap:6px;padding:6px 10px 8px}
+.ctxchips-label{font-size:12px;color:var(--muted)}
+.ctxchips-row{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:4px}
+.ctxchip{height:28px;min-width:0;border:1px solid var(--line2);background:transparent;border-radius:7px;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--text);padding:0;white-space:nowrap}
 .ctxchip:hover,.ctxchip:focus-visible{background:var(--hover);outline:none}
 .ctxchip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 
