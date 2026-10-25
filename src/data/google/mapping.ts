@@ -1,6 +1,7 @@
 import { parseYmd, ymd } from '../../domain/dates';
 import { DEFAULT_COLOR } from '../../domain/colors';
 import { normalizeDescription } from '../../domain/markdown/htmlToMd';
+import { applyChecklistState, checklistState, uncheckAll } from '../../domain/markdown/tasks';
 import { isLabel } from '../../domain/labels';
 import { tagsFromStorage, tagsToStorage } from '../../domain/tags';
 import type { NewTask, Task } from '../../domain/types';
@@ -31,15 +32,38 @@ export type GEventBody = Partial<Omit<GEvent, 'id' | 'etag' | 'status'>>;
 /** Private extended property keys this app owns. */
 const OWN_KEYS = ['done', 'label', 'tags'] as const;
 
+/**
+ * Done and checklist state of one occurrence of a repeating task. Google applies private
+ * properties set on an occurrence to its whole series (marking today done marked every day
+ * done), so this state lives on the series, keyed by occurrence: `d_<occurrence>` = "1"/"0",
+ * `c_<occurrence>` = ticked checklist items such as "101".
+ */
+const DONE_KEY = 'd_';
+const TICKS_KEY = 'c_';
+const OCCURRENCE_KEY = /^[dc]_/;
+/** Per-occurrence state older than this many days is dropped (Google allows 300 properties). */
+const KEEP_DAYS = 60;
+
+/** The part of an occurrence's id after its series id: "20261024T210000Z", or "20261024" all day. */
+export function occurrenceKey(t: Pick<Task, 'id' | 'seriesId' | 'originalStart'>): string {
+  if (t.seriesId && t.id.startsWith(t.seriesId + '_')) return t.id.slice(t.seriesId.length + 1);
+  return (t.originalStart ?? new Date(0)).toISOString().replace(/[-:]|\.\d+/g, '');
+}
+
 export const isUsable = (g: GEvent) => g.status !== 'cancelled' && !!g.start && !!g.end;
 
 export function fromGoogle(g: GEvent): Task {
   const allDay = !!g.start?.date;
   const priv = { ...(g.extendedProperties?.private ?? {}) };
-  const done = priv.done === '1';
+  // An occurrence reads its own state from the keys its series holds for it (see DONE_KEY).
+  const occ = g.recurringEventId ? occurrenceKey({ id: g.id, seriesId: g.recurringEventId }) : null;
+  const done = occ ? priv[DONE_KEY + occ] === '1' : priv.done === '1';
+  const ticks = occ ? priv[TICKS_KEY + occ] : undefined;
   const label = priv.label;
   const tags = tagsFromStorage(priv.tags);
-  for (const k of OWN_KEYS) delete priv[k];
+  const occurrenceKeys = Object.keys(priv).filter((k) => OCCURRENCE_KEY.test(k));
+  for (const k of [...OWN_KEYS, ...occurrenceKeys]) delete priv[k];
+  const description = normalizeDescription(g.description);
   return {
     id: g.id,
     etag: g.etag,
@@ -47,13 +71,14 @@ export function fromGoogle(g: GEvent): Task {
     allDay,
     start: allDay ? parseYmd(g.start!.date!) : new Date(g.start!.dateTime!),
     end: allDay ? parseYmd(g.end!.date!) : new Date(g.end!.dateTime!),
-    description: normalizeDescription(g.description),
+    description: ticks ? applyChecklistState(description, ticks) : description,
     colorId: g.colorId || DEFAULT_COLOR,
     done,
     ...(isLabel(label) ? { label } : {}),
     ...(g.recurrence?.length ? { recurrence: g.recurrence } : {}),
     ...(g.recurringEventId ? { seriesId: g.recurringEventId } : {}),
     ...(g.originalStartTime ? { originalStart: g.originalStartTime.date ? parseYmd(g.originalStartTime.date) : new Date(g.originalStartTime.dateTime!) } : {}),
+    ...(occ && occurrenceKeys.length ? { occurrenceKeys } : {}),
     ...(tags.length ? { tags } : {}),
     ...(Object.keys(priv).length ? { extraProps: priv } : {}),
   };
@@ -116,4 +141,33 @@ export function patchBody(prev: Task, next: Task): GEventBody {
     b.extendedProperties = { private: privateOf(next) };
   }
   return b;
+}
+
+/**
+ * For an edit of one occurrence of a repeating task: the done and checklist changes, as
+ * properties to set on its series (null deletes), and what is left to save on the occurrence
+ * itself. Null when the edit changes neither.
+ */
+export function occurrenceProps(prev: Task, next: Task, now = new Date()): { props: Record<string, string | null>; rest: Task } | null {
+  const occ = occurrenceKey(prev);
+  const props: Record<string, string | null> = {};
+  let rest = next;
+  if (next.done !== prev.done) {
+    props[DONE_KEY + occ] = next.done ? '1' : '0';
+    rest = { ...rest, done: prev.done };
+  }
+  if (next.description !== prev.description) {
+    if (uncheckAll(next.description) === uncheckAll(prev.description)) {
+      // Only ticks changed.
+      props[TICKS_KEY + occ] = checklistState(next.description);
+      rest = { ...rest, description: prev.description };
+    } else if (prev.occurrenceKeys?.includes(TICKS_KEY + occ)) {
+      // The notes themselves changed: they are saved on the occurrence with their ticks.
+      props[TICKS_KEY + occ] = null;
+    }
+  }
+  if (!Object.keys(props).length) return null;
+  const cutoff = ymd(new Date(now.getTime() - KEEP_DAYS * 864e5)).replace(/-/g, '');
+  for (const k of prev.occurrenceKeys ?? []) if (k.slice(2, 10) < cutoff && !(k in props)) props[k] = null;
+  return { props, rest };
 }

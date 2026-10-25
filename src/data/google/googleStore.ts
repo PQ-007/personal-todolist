@@ -1,7 +1,7 @@
 import type { NewTask, Task } from '../../domain/types';
 import { t } from '../../i18n';
 import { AuthError, ConflictError, type TaskStore } from '../store';
-import { fromGoogle, isUsable, patchBody, toGoogle, type GEvent } from './mapping';
+import { fromGoogle, isUsable, occurrenceProps, patchBody, toGoogle, type GEvent } from './mapping';
 
 const BASE = 'https://www.googleapis.com/calendar/v3';
 
@@ -59,9 +59,21 @@ export function createGoogleStore(opts: GoogleStoreOptions): TaskStore {
       return fromGoogle(await api<GEvent>(`/calendars/${cal()}/events`, { method: 'POST', body: JSON.stringify(toGoogle(t)) }));
     },
     async update(prev, next) {
-      const body = patchBody(prev, next);
-      const headers: HeadersInit = prev.etag ? { 'If-Match': prev.etag } : {};
-      return fromGoogle(await api<GEvent>(eventPath(prev.id), { method: 'PATCH', headers, body: JSON.stringify(body) }));
+      // An occurrence's done and checklist state is saved on its series (see occurrenceProps).
+      const own = prev.seriesId ? occurrenceProps(prev, next) : null;
+      if (own) {
+        await api<GEvent>(eventPath(prev.seriesId!), { method: 'PATCH', body: JSON.stringify({ extendedProperties: { private: own.props } }) });
+      }
+      const body = patchBody(prev, own?.rest ?? next);
+      if (own && !Object.keys(body).length) {
+        const added = Object.keys(own.props).filter((k) => own.props[k] != null);
+        const kept = (prev.occurrenceKeys ?? []).filter((k) => !(k in own.props));
+        return { ...next, occurrenceKeys: [...kept, ...added] };
+      }
+      // Saving on the series changes its occurrences' etags, so occurrences skip the check.
+      const headers: HeadersInit = prev.etag && !prev.seriesId ? { 'If-Match': prev.etag } : {};
+      const saved = fromGoogle(await api<GEvent>(eventPath(prev.id), { method: 'PATCH', headers, body: JSON.stringify(body) }));
+      return own ? { ...saved, done: next.done, description: next.description } : saved;
     },
     async remove(id) {
       await api<null>(eventPath(id), { method: 'DELETE' });

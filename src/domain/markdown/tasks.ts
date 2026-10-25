@@ -21,6 +21,32 @@ export function uncheckAll(md: string): string {
     .join('\n');
 }
 
+/** Which checklist items (outside code fences) are ticked, in order: "101". */
+export function checklistState(md: string): string {
+  let out = '';
+  let fence = false;
+  for (const ln of splitLines(md || '')) {
+    if (FENCE.test(ln)) fence = !fence;
+    const m = fence ? null : ln.match(CHECKBOX);
+    if (m) out += m[2] === ' ' ? '0' : '1';
+  }
+  return out;
+}
+
+/** Ticks the checklist items as `checklistState` described them; items beyond it are left as they are. */
+export function applyChecklistState(md: string, state: string): string {
+  let i = 0;
+  let fence = false;
+  return splitLines(md)
+    .map((ln) => {
+      if (FENCE.test(ln)) fence = !fence;
+      if (fence || !CHECKBOX.test(ln)) return ln;
+      const tick = state[i++];
+      return tick == null ? ln : ln.replace(CHECKBOX, `$1[${tick === '1' ? 'x' : ' '}]`);
+    })
+    .join('\n');
+}
+
 /** Counts checklist items (outside code fences): `t` total, `d` done. */
 export function countTasks(md: string): { t: number; d: number } {
   let t = 0;

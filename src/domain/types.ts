@@ -22,6 +22,11 @@ export interface Task {
   /** On one occurrence of a series: the series' id, and when this occurrence was first due. */
   seriesId?: string;
   originalStart?: Date;
+  /**
+   * On an occurrence: the per-occurrence keys its series stores (done and checklist state of
+   * single occurrences, see google/mapping.ts), so old ones can be cleaned up.
+   */
+  occurrenceKeys?: string[];
   /** Google's version tag, used to detect edits made elsewhere before we overwrite them. */
   etag?: string;
   /** Private extended properties we don't manage ourselves; kept so we never drop them. */
