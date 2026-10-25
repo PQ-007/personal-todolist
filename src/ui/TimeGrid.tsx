@@ -19,7 +19,9 @@ import { planner, usePlanner } from '../state/planner';
 import { CREATE_SNAP_MIN, HPX, PPM, SNAP_MIN } from './constants';
 import { isStackDrag, overStack, stackDrag } from './dnd';
 import { useNow } from './hooks';
+import { Icon } from './Icon';
 import { LabelTag } from './LabelTag';
+import { repeats } from './recurring';
 
 interface Props {
   /** The consecutive days to show as columns. */
@@ -414,6 +416,11 @@ function Card({ seg, drag, ...handlers }: CardProps) {
       </div>
       <div className="ctitle">
         {t.label && <LabelTag label={t.label} iconOnly />}
+        {repeats(t) && (
+          <span className="crep" title={tr('rep.label')}>
+            <Icon name="repeat" size={12} />
+          </span>
+        )}
         <span className="ctitle-text">{t.title}</span>
       </div>
       {seg.endsHere && <div className="resize" aria-hidden="true" />}

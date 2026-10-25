@@ -13,6 +13,8 @@ const timed: GEvent = {
   extendedProperties: { private: { done: '1', other: 'keep' } },
 };
 
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 describe('fromGoogle', () => {
   it('maps a timed event', () => {
     const t = fromGoogle(timed);
@@ -56,8 +58,8 @@ describe('toGoogle', () => {
       summary: 'Review',
       description: '- [ ] a',
       colorId: '3',
-      start: { dateTime: '2026-10-19T00:00:00.000Z' },
-      end: { dateTime: '2026-10-19T01:30:00.000Z' },
+      start: { dateTime: '2026-10-19T00:00:00.000Z', timeZone: TZ },
+      end: { dateTime: '2026-10-19T01:30:00.000Z', timeZone: TZ },
       extendedProperties: { private: { other: 'keep', done: '1', label: '', tags: '' } },
     });
   });
@@ -96,8 +98,8 @@ describe('patchBody', () => {
   it('sends both times when either changes, keeping multi-day lengths', () => {
     const next = { ...base, end: new Date('2026-10-21T01:30:00Z') };
     expect(patchBody(base, next)).toEqual({
-      start: { dateTime: '2026-10-19T00:00:00.000Z' },
-      end: { dateTime: '2026-10-21T01:30:00.000Z' },
+      start: { dateTime: '2026-10-19T00:00:00.000Z', timeZone: TZ },
+      end: { dateTime: '2026-10-21T01:30:00.000Z', timeZone: TZ },
     });
   });
 
@@ -107,5 +109,28 @@ describe('patchBody', () => {
       start: { date: '2026-10-19', dateTime: null },
       end: { date: '2026-10-20', dateTime: null },
     });
+  });
+});
+
+describe('repeating events', () => {
+  it('reads a series and its occurrences', () => {
+    const series = fromGoogle({ ...timed, recurrence: ['RRULE:FREQ=WEEKLY;BYDAY=MO'] });
+    expect(series.recurrence).toEqual(['RRULE:FREQ=WEEKLY;BYDAY=MO']);
+    const one = fromGoogle({ ...timed, id: 'e1_20261019T000000Z', recurringEventId: 'e1', originalStartTime: { dateTime: '2026-10-19T09:00:00+09:00' } });
+    expect(one.seriesId).toBe('e1');
+    expect(one.originalStart?.toISOString()).toBe('2026-10-19T00:00:00.000Z');
+    expect(one.recurrence).toBeUndefined();
+  });
+
+  it('creates a series with its rule and a time zone', () => {
+    const b = toGoogle({ ...fromGoogle(timed), recurrence: ['RRULE:FREQ=DAILY'] });
+    expect(b.recurrence).toEqual(['RRULE:FREQ=DAILY']);
+    expect(b.start).toEqual({ dateTime: '2026-10-19T00:00:00.000Z', timeZone: TZ });
+  });
+
+  it('sends a changed rule, and nothing for an unchanged one', () => {
+    const base = fromGoogle({ ...timed, recurrence: ['RRULE:FREQ=DAILY'] });
+    expect(patchBody(base, { ...base, recurrence: ['RRULE:FREQ=WEEKLY'] })).toEqual({ recurrence: ['RRULE:FREQ=WEEKLY'] });
+    expect(patchBody(base, { ...base })).toEqual({});
   });
 });

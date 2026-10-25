@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import { copyOf, placeCopy, weekCopies } from '../domain/clipboard';
 import { DEFAULT_COLOR } from '../domain/colors';
-import { addDays, hm, startOfDay } from '../domain/dates';
+import { addDays, dayDiff, hm, startOfDay, withTime } from '../domain/dates';
 import type { NewTask, Task } from '../domain/types';
 import { createDemoStore } from '../data/demo/demoStore';
-import { clearToken, getToken, hasToken, restoreToken, signIn } from '../data/google/auth';
+import { clearToken, ensureToken, getToken, restoreToken, signIn, signOut } from '../data/google/auth';
 import { createGoogleStore } from '../data/google/googleStore';
 import { createStackStore, type StackStore } from '../data/stackStore';
 import { AuthError, ConflictError, type TaskStore } from '../data/store';
@@ -104,6 +104,12 @@ export class Planner {
     };
     this.store = this.makeStore();
     this.loadStack();
+    // Back from a sign-in that Google or the auth function turned down.
+    const authError = new URLSearchParams(location.search).get('auth');
+    if (authError) {
+      history.replaceState(null, '', location.pathname);
+      this.toast(tr(authError === 'scope' ? 'err.scope' : 'err.signIn'));
+    }
   }
 
   private loadStack() {
@@ -145,7 +151,8 @@ export class Planner {
 
   async refresh() {
     const seq = ++this.loadSeq;
-    if (this.state.settings.mode === 'google' && !hasToken()) {
+    if (this.state.settings.mode === 'google' && !(await ensureToken())) {
+      if (seq !== this.loadSeq) return;
       this.server.clear();
       this.set({ needAuth: true, tasks: [] });
       return;
@@ -179,7 +186,7 @@ export class Planner {
    * it changes nothing on screen, and a failure just returns nothing (no toast).
    */
   async peek(from: Date, to: Date): Promise<Task[]> {
-    if (this.state.settings.mode === 'google' && !hasToken()) return [];
+    if (this.state.settings.mode === 'google' && !(await ensureToken())) return [];
     try {
       return await this.store.list(from, to);
     } catch {
@@ -224,13 +231,19 @@ export class Planner {
     }
   }
 
+  async disconnect() {
+    await signOut();
+    this.server.clear();
+    this.set({ needAuth: true, tasks: [] });
+  }
+
   async applySettings(settings: Settings) {
     saveSettings(settings);
     this.set({ settings, tasks: [] });
     this.server.clear();
     this.store = this.makeStore();
     this.loadStack();
-    if (settings.mode === 'google' && !hasToken()) await this.connect();
+    if (settings.mode === 'google' && !(await ensureToken())) await this.connect();
     else await this.refresh();
   }
 
@@ -270,7 +283,68 @@ export class Planner {
   }
 
   create(input: NewTask): Promise<void> {
-    return this.startCreate(input).done;
+    const { done } = this.startCreate(input);
+    // A new series shows as one task until its occurrences are loaded.
+    return input.recurrence?.length ? done.then(() => this.refresh()) : done;
+  }
+
+  /* ---------- repeating tasks ---------- */
+
+  /** The series a task belongs to: itself when it is one, its series for an occurrence, else null. */
+  async seriesOf(task: Task): Promise<Task | null> {
+    if (task.recurrence?.length) return task;
+    if (!task.seriesId) return null;
+    try {
+      return await this.store.getSeries(task.seriesId);
+    } catch (e) {
+      this.fail(e);
+      return null;
+    }
+  }
+
+  /**
+   * Applies an edit to every occurrence: the series keeps its first day and takes the edited
+   * fields, time of day and length. Without a rule the series stops repeating and this
+   * occurrence becomes a plain task. Reloads afterwards, since every occurrence may change.
+   */
+  async updateSeries(occurrence: Task, next: NewTask, recurrence: string[] | undefined) {
+    const series = await this.seriesOf(occurrence);
+    if (!series) return;
+    const day = startOfDay(series.start);
+    const start = next.allDay ? day : withTime(day, next.start.getHours(), next.start.getMinutes());
+    const end = next.allDay ? addDays(day, Math.max(1, dayDiff(next.start, next.end))) : new Date(start.getTime() + (next.end.getTime() - next.start.getTime()));
+    const { title, description, colorId, label, tags, allDay } = next;
+    this.set({ sync: 'saving' });
+    try {
+      if (recurrence?.length) {
+        await this.store.update(series, { ...series, title, description, colorId, label, tags, allDay, start, end, recurrence });
+      } else {
+        await this.store.remove(series.id);
+        await this.store.create({ ...next, recurrence: undefined, seriesId: undefined, originalStart: undefined });
+      }
+      this.set({ sync: 'saved' });
+    } catch (e) {
+      this.fail(e);
+    }
+    await this.refresh();
+  }
+
+  /** Deletes every occurrence of the task's series. Undo brings the series back. */
+  async deleteSeries(occurrence: Task) {
+    const series = await this.seriesOf(occurrence);
+    if (!series) return;
+    this.set({ tasks: this.state.tasks.filter((t) => t.seriesId !== series.id && t.id !== series.id), sync: 'saving' });
+    try {
+      await this.store.remove(series.id);
+      this.set({ sync: 'saved' });
+    } catch (e) {
+      this.fail(e);
+      return void this.refresh();
+    }
+    this.toast(tr('rep.deletedAll', { title: series.title }), {
+      label: tr('toast.undo'),
+      run: () => void this.create({ ...copyOf(series), recurrence: series.recurrence, extraProps: series.extraProps }),
+    });
   }
 
   /** Shows the task at once under a temporary id and saves it in the background. */

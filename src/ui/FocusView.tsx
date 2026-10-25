@@ -15,6 +15,7 @@ import { useNow } from './hooks';
 import { Icon } from './Icon';
 import { isImeKey } from './ime';
 import { LabelTag } from './LabelTag';
+import { repeats } from './recurring';
 import { MarkdownView } from './MarkdownView';
 import { stackItemMenu } from './stackMenu';
 import { TagChip } from './TagChip';
@@ -209,6 +210,11 @@ function TaskCard({ task, now, isToday, onEdit, onTaskMenu, hero, onCollapse }: 
         <span>{task.allDay ? t('modal.allDay') : `${hm(task.start)} – ${hm(task.end)}`}</span>
         {countdown && <span className="f-countdown">{countdown}</span>}
         <span className="sp" />
+        {repeats(task) && (
+          <span className="f-repeat" title={t('rep.label')}>
+            <Icon name="repeat" size={14} />
+          </span>
+        )}
         {task.label && <LabelTag label={task.label} />}
         {task.tags?.map((tag) => <TagChip key={tag} tag={tag} />)}
         {onCollapse && (

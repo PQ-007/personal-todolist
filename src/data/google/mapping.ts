@@ -22,6 +22,8 @@ export interface GEvent {
   start?: GEventTime;
   end?: GEventTime;
   recurringEventId?: string;
+  originalStartTime?: GEventTime;
+  recurrence?: string[];
   extendedProperties?: { private?: Record<string, string>; shared?: Record<string, string> };
 }
 export type GEventBody = Partial<Omit<GEvent, 'id' | 'etag' | 'status'>>;
@@ -49,15 +51,21 @@ export function fromGoogle(g: GEvent): Task {
     colorId: g.colorId || DEFAULT_COLOR,
     done,
     ...(isLabel(label) ? { label } : {}),
+    ...(g.recurrence?.length ? { recurrence: g.recurrence } : {}),
+    ...(g.recurringEventId ? { seriesId: g.recurringEventId } : {}),
+    ...(g.originalStartTime ? { originalStart: g.originalStartTime.date ? parseYmd(g.originalStartTime.date) : new Date(g.originalStartTime.dateTime!) } : {}),
     ...(tags.length ? { tags } : {}),
     ...(Object.keys(priv).length ? { extraProps: priv } : {}),
   };
 }
 
-const timeOf = (allDay: boolean, d: Date): GEventTime => (allDay ? { date: ymd(d) } : { dateTime: d.toISOString() });
+/** The browser's time zone; Google requires one on timed repeating events. */
+const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+const timeOf = (allDay: boolean, d: Date): GEventTime => (allDay ? { date: ymd(d) } : { dateTime: d.toISOString(), timeZone: zone() });
 /** Like `timeOf`, but explicitly clears the other field so Google drops it. */
 const timeSwitch = (allDay: boolean, d: Date): GEventTime =>
-  allDay ? { date: ymd(d), dateTime: null } : { dateTime: d.toISOString(), date: null };
+  allDay ? { date: ymd(d), dateTime: null } : { dateTime: d.toISOString(), timeZone: zone(), date: null };
 
 /** Empty values clear a label or tags: a PATCH merges private properties, so a missing key would keep the old one. */
 const privateOf = (t: NewTask) => ({
@@ -76,6 +84,7 @@ export function toGoogle(t: NewTask): GEventBody {
     start: timeOf(t.allDay, t.start),
     end: timeOf(t.allDay, t.end),
     extendedProperties: { private: privateOf(t) },
+    ...(t.recurrence?.length ? { recurrence: t.recurrence } : {}),
   };
 }
 
@@ -88,6 +97,7 @@ export function patchBody(prev: Task, next: Task): GEventBody {
   if (next.title !== prev.title) b.summary = next.title;
   if (next.description !== prev.description) b.description = next.description;
   if (next.colorId !== prev.colorId) b.colorId = next.colorId;
+  if ((next.recurrence ?? []).join('\n') !== (prev.recurrence ?? []).join('\n')) b.recurrence = next.recurrence ?? [];
   if (
     next.allDay !== prev.allDay ||
     next.start.getTime() !== prev.start.getTime() ||

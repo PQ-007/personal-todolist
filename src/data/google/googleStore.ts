@@ -7,7 +7,7 @@ const BASE = 'https://www.googleapis.com/calendar/v3';
 
 export interface GoogleStoreOptions {
   calendarId: string;
-  getToken: () => string;
+  getToken: () => Promise<string>;
   /** Called when Google rejects the token, so the caller can drop it. */
   onUnauthorized?: () => void;
 }
@@ -15,13 +15,15 @@ export interface GoogleStoreOptions {
 export function createGoogleStore(opts: GoogleStoreOptions): TaskStore {
   const cal = () => encodeURIComponent(opts.calendarId || 'primary');
 
-  async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async function api<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
     const headers = new Headers(init.headers);
-    headers.set('Authorization', `Bearer ${opts.getToken()}`);
+    headers.set('Authorization', `Bearer ${await opts.getToken()}`);
     if (init.body) headers.set('Content-Type', 'application/json');
     const r = await fetch(BASE + path, { ...init, headers });
     if (r.status === 401) {
       opts.onUnauthorized?.();
+      // Revoked or expired early: try once more with a renewed token (when one can be had).
+      if (!retried) return api<T>(path, init, true);
       throw new AuthError();
     }
     if (r.status === 412) throw new ConflictError();
@@ -63,6 +65,9 @@ export function createGoogleStore(opts: GoogleStoreOptions): TaskStore {
     },
     async remove(id) {
       await api<null>(eventPath(id), { method: 'DELETE' });
+    },
+    async getSeries(id) {
+      return fromGoogle(await api<GEvent>(eventPath(id)));
     },
   };
 }

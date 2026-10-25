@@ -13,6 +13,7 @@ import { ContextMenu, type MenuEntry, type MenuState } from './ContextMenu';
 import { FocusView, QUICK_ADD_ID } from './FocusView';
 import { isTyping, shortcutKey } from './keys';
 import { MiniCalendar } from './MiniCalendar';
+import { deleteTask } from './recurring';
 import { MonthView } from './MonthView';
 import { PlanPanel } from './PlanPanel';
 import { SettingsDialog } from './SettingsDialog';
@@ -108,7 +109,7 @@ export function App() {
     { label: t('menu.toStack'), icon: 'inbox', onSelect: () => planner.unschedule(task.id) },
     { label: t('menu.copy'), icon: 'copy', hint: KEYS.copy, onSelect: () => planner.copy(task.id) },
     { kind: 'separator' },
-    { label: t('menu.delete'), icon: 'trash', hint: KEYS.del, danger: true, onSelect: () => planner.deleteWithUndo(task.id) },
+    { label: t('menu.delete'), icon: 'trash', hint: KEYS.del, danger: true, onSelect: () => void deleteTask(task.id) },
   ];
 
   const openTaskMenu = (id: string, x: number, y: number) => {
@@ -224,7 +225,7 @@ export function App() {
         const id = focusedTaskId();
         if (id) {
           e.preventDefault();
-          planner.deleteWithUndo(id);
+          void deleteTask(id);
         }
         return;
       }

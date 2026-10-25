@@ -21,4 +21,9 @@ export default tseslint.config(
     files: ['src/data/**/*.ts'],
     rules: { 'no-restricted-globals': 'off' },
   },
+  {
+    files: ['netlify/**/*.ts'],
+    languageOptions: { globals: globals.node },
+    rules: { 'no-restricted-globals': 'off' },
+  },
 );

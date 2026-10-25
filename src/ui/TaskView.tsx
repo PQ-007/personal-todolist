@@ -1,7 +1,8 @@
-import { useEffect, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { colorOf } from '../domain/colors';
 import { addDays, addMin, hm, sameDay } from '../domain/dates';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
+import { parseRule } from '../domain/recurrence';
 import type { Task } from '../domain/types';
 import { fmtDate, fmtDuration, t } from '../i18n';
 import { planner, usePlanner } from '../state/planner';
@@ -10,6 +11,8 @@ import { Icon } from './Icon';
 import { LabelTag } from './LabelTag';
 import { isTyping, shortcutKey } from './keys';
 import { MarkdownView } from './MarkdownView';
+import { deleteTask, repeats } from './recurring';
+import { describeRepeat } from './repeatText';
 import { TagChip } from './TagChip';
 
 const DATE: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' };
@@ -37,6 +40,19 @@ export function TaskView({ id, onClose, onEdit }: { id: string; onClose: () => v
   useEffect(() => {
     if (!task) onClose();
   }, [task, onClose]);
+
+  // "Weekly on Thursday": an occurrence doesn't carry its series' rule, so look it up.
+  const [repeatText, setRepeatText] = useState<{ id: string; text: string } | null>(null);
+  const seriesKey = task && repeats(task) ? (task.seriesId ?? task.id) : null;
+  useEffect(() => {
+    const cur = seriesKey ? planner.find(id) : undefined;
+    if (!cur) return;
+    let live = true;
+    void planner.seriesOf(cur).then((s) => live && s && setRepeatText({ id, text: describeRepeat(parseRule(s.recurrence), s.start) }));
+    return () => {
+      live = false;
+    };
+  }, [id, seriesKey]);
   if (!task) return null;
 
   const { t: total, d: done } = countTasks(task.description);
@@ -49,8 +65,8 @@ export function TaskView({ id, onClose, onEdit }: { id: string; onClose: () => v
       onEdit();
     } else if (e.key === 'Delete') {
       e.preventDefault();
-      onClose();
-      planner.deleteWithUndo(task.id);
+      // The view closes by itself once the task is gone (and stays if a repeat question is cancelled).
+      void deleteTask(task.id);
     }
   };
 
@@ -82,10 +98,7 @@ export function TaskView({ id, onClose, onEdit }: { id: string; onClose: () => v
               className="iconbtn danger"
               aria-label={t('menu.delete')}
               title={t('menu.delete')}
-              onClick={() => {
-                onClose();
-                planner.deleteWithUndo(task.id);
-              }}
+              onClick={() => void deleteTask(task.id)}
             >
               <Icon name="trash" />
             </button>
@@ -98,6 +111,12 @@ export function TaskView({ id, onClose, onEdit }: { id: string; onClose: () => v
             <Icon name="clock" size={16} />
             {whenText(task)}
           </p>
+          {repeatText?.id === id && (
+            <p className="tv-when tv-repeat">
+              <Icon name="repeat" size={16} />
+              {repeatText.text}
+            </p>
+          )}
         </header>
 
         <div className="tv-body">

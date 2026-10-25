@@ -1,4 +1,4 @@
-# My Week
+# Calpis
 
 A personal weekly planner and to-do list that uses **Google Calendar as its database**.
 Every calendar event is a task; its description holds markdown notes with checklists.
@@ -48,7 +48,7 @@ The app starts in **demo mode**. To use Google Calendar, follow the setup below,
 You need a Google Cloud project with the Calendar API and an OAuth client ID. This is free.
 
 1. **Create a project.** Go to <https://console.cloud.google.com/>, open the project picker
-   and choose **New project** (for example “my-week-planner”).
+   and choose **New project** (for example “calpis”).
 2. **Enable the Calendar API.** In **APIs & Services → Library**, search for
    **Google Calendar API** and click **Enable**.
 3. **Configure the OAuth consent screen.** In **APIs & Services → OAuth consent screen**
@@ -57,7 +57,11 @@ You need a Google Cloud project with the Calendar API and an OAuth client ID. Th
    - App name, support email and developer email: anything you like.
    - Scopes: add `https://www.googleapis.com/auth/calendar.events`.
    - Test users: add your own Google account. While the app is in **Testing**, only test
-     users can sign in. That's all you need for personal use.
+     users can sign in.
+   - **Publishing status: In production** (Audience page → **Publish app**) if you deploy the
+     sign-in function (see “Staying signed in”). In **Testing**, Google expires the stored
+     sign-in after 7 days. You don't need verification for personal use: on sign-in, Google
+     shows “Google hasn't verified this app”; choose **Advanced → Go to … (unsafe)**.
 4. **Create an OAuth client ID.** In **APIs & Services → Credentials → Create credentials →
    OAuth client ID**:
    - Application type: **Web application**.
@@ -67,9 +71,10 @@ You need a Google Cloud project with the Calendar API and an OAuth client ID. Th
      - `http://localhost:4173` (`npm run preview`)
      - `https://YOUR-SITE.netlify.app` (your Netlify URL, see below)
      - your custom domain, if you add one
-   - **Authorized redirect URIs**: leave empty. The app uses the token flow, which doesn't need one.
-   - Copy the **Client ID** (`…apps.googleusercontent.com`). There is no client secret to
-     keep: this app never uses one.
+   - **Authorized redirect URIs**: `https://YOUR-SITE.netlify.app/api/auth/callback` (and the
+     same for a custom domain). Only the deployed sign-in function uses it.
+   - Copy the **Client ID** (`…apps.googleusercontent.com`) and the **Client secret**. The
+     secret goes only into Netlify's environment, never into `.env` or the app.
 5. **Give the app the client ID.** Either put it in `.env` as `VITE_GOOGLE_CLIENT_ID=…`
    (used as the default) or paste it in **Settings**. Settings win over `.env`.
 6. **(Recommended) Use a dedicated “Tasks” calendar.** In Google Calendar, create a new
@@ -88,26 +93,44 @@ Origin changes can take a few minutes to apply. If sign-in fails with
 2. In Netlify: **Add new site → Import an existing project → GitHub**, pick the repository.
    Build command `npm run build` and publish directory `dist` are read from `netlify.toml`.
 3. **Site configuration → Environment variables**: add `VITE_GOOGLE_CLIENT_ID` with your
-   client ID (optional; you can also paste it in Settings).
+   client ID and `GOOGLE_CLIENT_SECRET` with the client secret. Mark the secret as
+   **Contains secret values**.
 4. Deploy, then add the site URL (`https://YOUR-SITE.netlify.app`) to the OAuth client's
-   **Authorized JavaScript origins** (setup step 4).
+   **Authorized JavaScript origins**, and `https://YOUR-SITE.netlify.app/api/auth/callback` to
+   its **Authorized redirect URIs** (setup step 4).
 5. On your phone, open the site and use **Add to Home Screen** (iOS Safari: Share menu;
    Android Chrome: menu → **Install app**).
 
 Deploy previews and branch deploys get their own URLs, which aren't authorized origins, so
 Google sign-in only works on the production URL and localhost. Demo mode works everywhere.
 
+### Staying signed in
+
+On Netlify, sign-in goes through a small function, `netlify/functions/auth.ts`. You sign in
+once per device and stay signed in, across closed windows and restarts, until you press
+**Settings → Sign out** or remove the app's access in your Google account. The function keeps
+Google's refresh token in an httpOnly, `SameSite=Strict` cookie, which page scripts can't
+read, and gives the app a fresh one-hour access token whenever it needs one. The client
+secret stays on Netlify.
+
+Without the function (the plain `npm run dev` server, or `GOOGLE_CLIENT_SECRET` not set), the
+app falls back to Google's token flow: a sign-in lasts about an hour and survives reloads, but
+not closing the tab. To try the function locally, run `npx netlify dev` with
+`GOOGLE_CLIENT_SECRET` in `.env`, and add `http://localhost:8888` and
+`http://localhost:8888/api/auth/callback` to the OAuth client.
+
 ## Secrets
 
-Nothing secret is committed. `.env` is git-ignored; `.env.example` shows the variable. An
+Nothing secret is committed. `.env` is git-ignored; `.env.example` shows the variables. An
 OAuth *client ID* isn't a secret (it's visible in the browser anyway); it is kept out of git
-so each deployment can use its own.
+so each deployment can use its own. The *client secret* is read only by the Netlify function,
+and has no `VITE_` prefix, so it is never built into the app.
 
 ## How it's built
 
 TypeScript, React and Vite, with `vite-plugin-pwa` for the installable, offline app shell.
-No Google SDK: Google Identity Services issues the token and the Calendar REST API is called
-directly.
+No Google SDK: the sign-in function (or Google Identity Services, without it) issues the
+token and the Calendar REST API is called directly.
 
 ```
 src/

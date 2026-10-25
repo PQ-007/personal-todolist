@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { COLORS, COLOR_NAMES, DEFAULT_COLOR } from '../domain/colors';
 import { addMin } from '../domain/dates';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
 import { LABELS, type Label } from '../domain/labels';
+import { parseRule, presetOf, presets, ruleLine, type Repeat } from '../domain/recurrence';
 import { formatTags, parseTagField } from '../domain/tags';
 import type { Task } from '../domain/types';
 import {
@@ -20,9 +21,14 @@ import { confirmDialog } from './confirm';
 import { Dialog } from './Dialog';
 import { Icon } from './Icon';
 import { isImeKey } from './ime';
-import { MarkdownEditor } from './MarkdownEditor';
 import { MarkdownView } from './MarkdownView';
+import { askScope, repeats } from './recurring';
+import { RepeatDialog } from './RepeatDialog';
+import { describeRepeat } from './repeatText';
 import { Rich } from './Rich';
+
+// CodeMirror is only needed once a task is being edited.
+const MarkdownEditor = lazy(() => import('./MarkdownEditor'));
 
 export type ModalTarget = { kind: 'view'; id: string } | { kind: 'edit'; id: string } | { kind: 'new'; start: Date; label?: Label };
 
@@ -70,6 +76,25 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   const [showEnd, setShowEnd] = useState(() => isMultiDay(start.when));
   const titleRef = useRef<HTMLInputElement>(null);
   const isNew = !task;
+  // How it repeats. An occurrence doesn't carry its series' rule, so that is loaded first.
+  const [{ repeat0, lines0 }] = useState(() => ({ repeat0: parseRule(task?.recurrence), lines0: task?.recurrence }));
+  const [repeat, setRepeat] = useState<Repeat | null>(repeat0);
+  const [orig, setOrig] = useState({ repeat: repeat0, lines: lines0, ready: !task?.seriesId });
+  const [customOpen, setCustomOpen] = useState(false);
+
+  useEffect(() => {
+    if (!task?.seriesId) return;
+    let live = true;
+    void planner.seriesOf(task).then((series) => {
+      if (!live) return;
+      const r = parseRule(series?.recurrence);
+      setRepeat(r);
+      setOrig({ repeat: r, lines: series?.recurrence, ready: true });
+    });
+    return () => {
+      live = false;
+    };
+  }, [task]);
 
   useEffect(() => {
     if (isNew) titleRef.current?.focus();
@@ -95,7 +120,10 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
     }).then((ok) => ok && onClose());
   };
 
-  const save = () => {
+  /** The RRULE lines to save; an unchanged rule is kept exactly as stored (it may have parts we can't edit). */
+  const recurrenceLines = (allDay: boolean) => (!repeat ? undefined : repeat === orig.repeat && orig.lines ? orig.lines : [ruleLine(repeat, allDay)]);
+
+  const save = async () => {
     const title = draft.title.trim();
     if (!title) {
       planner.toast(tr('modal.needTitle'));
@@ -109,17 +137,41 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
       return;
     }
     const fields = { title, description: draft.description, colorId: draft.colorId, label: draft.label, tags: parseTagField(draft.tagsText), done: draft.done, ...range };
+    const recurrence = recurrenceLines(range.allDay);
+    if (!task) {
+      onClose();
+      void planner.create({ ...fields, recurrence });
+      return;
+    }
+    const cur = planner.find(task.id) ?? task;
+    if (repeats(cur)) {
+      if (!orig.ready) return;
+      // A new rule can only apply to the whole series.
+      const scope = await askScope('edit', repeat === orig.repeat);
+      if (!scope) return;
+      onClose();
+      if (scope === 'this') void planner.update({ ...cur, ...fields });
+      else void planner.updateSeries(cur, fields, recurrence);
+      return;
+    }
     onClose();
-    if (task) {
-      const cur = planner.find(task.id) ?? task;
-      void planner.update({ ...cur, ...fields });
-    } else void planner.create(fields);
+    // A task that starts repeating becomes a series; reload to show its occurrences.
+    if (recurrence) void planner.update({ ...cur, ...fields, recurrence }).then(() => planner.refresh());
+    else void planner.update({ ...cur, ...fields });
   };
 
-  const remove = () => {
+  const remove = async () => {
     if (!task) return;
+    if (!repeats(task)) {
+      onClose();
+      planner.deleteWithUndo(task.id);
+      return;
+    }
+    const scope = await askScope('delete');
+    if (!scope) return;
     onClose();
-    planner.deleteWithUndo(task.id);
+    if (scope === 'this') planner.deleteWithUndo(task.id);
+    else void planner.deleteSeries(task);
   };
 
   const toggleLine = (line: number) => {
@@ -132,197 +184,240 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !isImeKey(e)) {
       e.preventDefault();
-      save();
+      void save();
     }
   };
 
   const { t, d } = countTasks(draft.description);
   const w = draft.when;
   const endVisible = showEnd || isMultiDay(w);
+  const startAt = rangeFromForm(w).start;
+  const repeatFrom = Number.isNaN(startAt.getTime()) ? new Date() : startAt;
+  const repeatValue = presetOf(repeat, repeatFrom) ?? 'current';
 
   return (
-    <Dialog label={tr(isNew ? 'modal.new' : 'modal.details')} onRequestClose={requestClose}>
-      <div className="mwrap" onKeyDown={onKeyDown}>
-        <div className="mhead">
-          <div className="swatches" role="radiogroup" aria-label={tr('modal.color')}>
-            {Object.entries(COLORS).map(([k, c]) => (
+    <>
+      {customOpen && (
+        <RepeatDialog
+          start={repeatFrom}
+          initial={repeat}
+          onDone={(r) => {
+            setRepeat(r);
+            setDirty(true);
+            setCustomOpen(false);
+          }}
+          onCancel={() => setCustomOpen(false)}
+        />
+      )}
+      <Dialog label={tr(isNew ? 'modal.new' : 'modal.details')} onRequestClose={requestClose}>
+        <div className="mwrap" onKeyDown={onKeyDown}>
+          <div className="mhead">
+            <div className="swatches" role="radiogroup" aria-label={tr('modal.color')}>
+              {Object.entries(COLORS).map(([k, c]) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="radio"
+                  aria-checked={k === draft.colorId}
+                  className={'sw' + (k === draft.colorId ? ' on' : '')}
+                  style={{ '--c': c } as CSSProperties}
+                  aria-label={tr(COLOR_NAMES[k]!)}
+                  onClick={() => change({ colorId: k })}
+                />
+              ))}
+            </div>
+            <label className="donechk">
+              <input type="checkbox" checked={draft.done} onChange={(e) => change({ done: e.target.checked })} /> {tr('modal.done')}
+            </label>
+            <button type="button" className="x" aria-label={tr('modal.close')} onClick={requestClose}>
+              <Icon name="x" />
+            </button>
+          </div>
+
+          <input
+            ref={titleRef}
+            className="mtitle"
+            placeholder={tr('modal.titlePlaceholder')}
+            aria-label={tr('modal.title')}
+            value={draft.title}
+            autoComplete="off"
+            onChange={(e) => change({ title: e.target.value })}
+          />
+
+          <div className="mwhen">
+            <input
+              type="date"
+              aria-label={tr(endVisible ? 'modal.startDate' : 'modal.date')}
+              value={w.startDate}
+              onChange={(e) => changeWhen((f) => setStartDate(f, e.target.value))}
+            />
+            {!w.allDay && (
+              <span className="timebox">
+                <input
+                  type="time"
+                  aria-label={tr('modal.startTime')}
+                  value={w.startTime}
+                  onChange={(e) => changeWhen((f) => ({ ...f, startTime: e.target.value }))}
+                />
+                –
+              </span>
+            )}
+            {endVisible && (
+              <span className="enddate">
+                {w.allDay && tr('modal.to')}
+                <input
+                  type="date"
+                  aria-label={tr('modal.endDate')}
+                  value={w.endDate}
+                  min={w.startDate}
+                  onChange={(e) => changeWhen((f) => ({ ...f, endDate: e.target.value }))}
+                />
+              </span>
+            )}
+            {!w.allDay && (
+              <span className="timebox">
+                <input
+                  type="time"
+                  aria-label={tr('modal.endTime')}
+                  value={w.endTime}
+                  onChange={(e) => changeWhen((f) => ({ ...f, endTime: e.target.value }))}
+                />
+              </span>
+            )}
+            <label>
+              <input
+                type="checkbox"
+                checked={w.allDay}
+                onChange={(e) => {
+                  changeWhen((f) => setAllDay(f, e.target.checked));
+                  setShowEnd(false);
+                }}
+              />{' '}
+              {tr('modal.allDay')}
+            </label>
+            {!endVisible && (
+              <button type="button" className="linkbtn" onClick={() => setShowEnd(true)}>
+                {tr(w.allDay ? 'modal.severalDays' : 'modal.endsAnotherDay')}
+              </button>
+            )}
+          </div>
+
+          <label className="mrepeat">
+            <Icon name="repeat" size={16} />
+            <span className="sr-only">{tr('rep.label')}</span>
+            <select
+              value={repeatValue}
+              disabled={!orig.ready}
+              onChange={(e) => {
+                const id = e.target.value;
+                if (id === 'custom') return setCustomOpen(true);
+                if (id === 'current') return;
+                setRepeat(presets(repeatFrom).find((p) => p.id === id)?.repeat ?? null);
+                setDirty(true);
+              }}
+            >
+              {presets(repeatFrom).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {describeRepeat(p.repeat, repeatFrom)}
+                </option>
+              ))}
+              {repeatValue === 'current' && <option value="current">{describeRepeat(repeat, repeatFrom)}</option>}
+              <option value="custom">{tr('rep.custom')}</option>
+            </select>
+          </label>
+
+          <div className="mlabel" role="radiogroup" aria-label={tr('label.field')}>
+            {[undefined, ...LABELS].map((l) => (
               <button
-                key={k}
+                key={l ?? 'none'}
                 type="button"
                 role="radio"
-                aria-checked={k === draft.colorId}
-                className={'sw' + (k === draft.colorId ? ' on' : '')}
-                style={{ '--c': c } as CSSProperties}
-                aria-label={tr(COLOR_NAMES[k]!)}
-                onClick={() => change({ colorId: k })}
-              />
+                aria-checked={draft.label === l}
+                className={'lblopt' + (l ? ' ' + l : '') + (draft.label === l ? ' on' : '')}
+                onClick={() => change({ label: l })}
+              >
+                {l && <Icon name={l} size={14} />}
+                {tr(l === 'work' ? 'label.work' : l === 'personal' ? 'label.personal' : 'label.none')}
+              </button>
             ))}
           </div>
-          <label className="donechk">
-            <input type="checkbox" checked={draft.done} onChange={(e) => change({ done: e.target.checked })} /> {tr('modal.done')}
-          </label>
-          <button type="button" className="x" aria-label={tr('modal.close')} onClick={requestClose}>
-            <Icon name="x" />
-          </button>
-        </div>
 
-        <input
-          ref={titleRef}
-          className="mtitle"
-          placeholder={tr('modal.titlePlaceholder')}
-          aria-label={tr('modal.title')}
-          value={draft.title}
-          autoComplete="off"
-          onChange={(e) => change({ title: e.target.value })}
-        />
-
-        <div className="mwhen">
-          <input
-            type="date"
-            aria-label={tr(endVisible ? 'modal.startDate' : 'modal.date')}
-            value={w.startDate}
-            onChange={(e) => changeWhen((f) => setStartDate(f, e.target.value))}
-          />
-          {!w.allDay && (
-            <span className="timebox">
-              <input
-                type="time"
-                aria-label={tr('modal.startTime')}
-                value={w.startTime}
-                onChange={(e) => changeWhen((f) => ({ ...f, startTime: e.target.value }))}
-              />
-              –
-            </span>
-          )}
-          {endVisible && (
-            <span className="enddate">
-              {w.allDay && tr('modal.to')}
-              <input
-                type="date"
-                aria-label={tr('modal.endDate')}
-                value={w.endDate}
-                min={w.startDate}
-                onChange={(e) => changeWhen((f) => ({ ...f, endDate: e.target.value }))}
-              />
-            </span>
-          )}
-          {!w.allDay && (
-            <span className="timebox">
-              <input
-                type="time"
-                aria-label={tr('modal.endTime')}
-                value={w.endTime}
-                onChange={(e) => changeWhen((f) => ({ ...f, endTime: e.target.value }))}
-              />
-            </span>
-          )}
-          <label>
+          <label className="mtags">
+            <span>{tr('tags.label')}</span>
             <input
-              type="checkbox"
-              checked={w.allDay}
-              onChange={(e) => {
-                changeWhen((f) => setAllDay(f, e.target.checked));
-                setShowEnd(false);
-              }}
-            />{' '}
-            {tr('modal.allDay')}
+              type="text"
+              value={draft.tagsText}
+              placeholder={tr('tags.placeholder')}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => change({ tagsText: e.target.value })}
+            />
           </label>
-          {!endVisible && (
-            <button type="button" className="linkbtn" onClick={() => setShowEnd(true)}>
-              {tr(w.allDay ? 'modal.severalDays' : 'modal.endsAnotherDay')}
-            </button>
-          )}
-        </div>
 
-        <div className="mlabel" role="radiogroup" aria-label={tr('label.field')}>
-          {[undefined, ...LABELS].map((l) => (
+          <div className="tabs" role="tablist">
             <button
-              key={l ?? 'none'}
               type="button"
-              role="radio"
-              aria-checked={draft.label === l}
-              className={'lblopt' + (l ? ' ' + l : '') + (draft.label === l ? ' on' : '')}
-              onClick={() => change({ label: l })}
+              role="tab"
+              aria-selected={tab === 'edit'}
+              className={'tab' + (tab === 'edit' ? ' on' : '')}
+              onClick={() => {
+                setTab('edit');
+                requestAnimationFrame(() => document.getElementById('m-desc')?.focus());
+              }}
             >
-              {l && <Icon name={l} size={14} />}
-              {tr(l === 'work' ? 'label.work' : l === 'personal' ? 'label.personal' : 'label.none')}
+              {tr('modal.editMarkdown')}
             </button>
-          ))}
-        </div>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'view'}
+              className={'tab' + (tab === 'view' ? ' on' : '')}
+              onClick={() => setTab('view')}
+            >
+              {tr('modal.notes')}
+            </button>
+            {t > 0 && (
+              <div className="prog" aria-label={tr('modal.checklistProgress', { done: d, total: t })}>
+                <span>
+                  <i style={{ width: `${Math.round((d / t) * 100)}%` }} />
+                </span>
+                {tr('modal.doneCount', { done: d, total: t })}
+              </div>
+            )}
+          </div>
 
-        <label className="mtags">
-          <span>{tr('tags.label')}</span>
-          <input
-            type="text"
-            value={draft.tagsText}
-            placeholder={tr('tags.placeholder')}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => change({ tagsText: e.target.value })}
-          />
-        </label>
-
-        <div className="tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'edit'}
-            className={'tab' + (tab === 'edit' ? ' on' : '')}
-            onClick={() => {
-              setTab('edit');
-              requestAnimationFrame(() => document.getElementById('m-desc')?.focus());
-            }}
-          >
-            {tr('modal.editMarkdown')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'view'}
-            className={'tab' + (tab === 'view' ? ' on' : '')}
-            onClick={() => setTab('view')}
-          >
-            {tr('modal.notes')}
-          </button>
-          {t > 0 && (
-            <div className="prog" aria-label={tr('modal.checklistProgress', { done: d, total: t })}>
-              <span>
-                <i style={{ width: `${Math.round((d / t) * 100)}%` }} />
-              </span>
-              {tr('modal.doneCount', { done: d, total: t })}
-            </div>
-          )}
-        </div>
-
-        <div className="mbody" role="tabpanel">
-          {tab === 'view' ? (
-            draft.description.trim() ? (
-              <MarkdownView source={draft.description} onToggle={toggleLine} />
+          <div className="mbody" role="tabpanel">
+            {tab === 'view' ? (
+              draft.description.trim() ? (
+                <MarkdownView source={draft.description} onToggle={toggleLine} />
+              ) : (
+                <p className="empty">
+                  <Rich text={tr('modal.noNotes')} parts={{ code: <code>- [ ] item</code> }} />
+                </p>
+              )
             ) : (
-              <p className="empty">
-                <Rich text={tr('modal.noNotes')} parts={{ code: <code>- [ ] item</code> }} />
-              </p>
-            )
-          ) : (
-            <MarkdownEditor value={draft.description} onChange={(description) => change({ description })} />
-          )}
-        </div>
+              <Suspense fallback={<div className="mdedit" />}>
+                <MarkdownEditor value={draft.description} onChange={(description) => change({ description })} />
+              </Suspense>
+            )}
+          </div>
 
-        <div className="mfoot">
-          {!isNew && (
-            <button type="button" className="btn danger ghost" onClick={remove}>
-              {tr('modal.delete')}
+          <div className="mfoot">
+            {!isNew && (
+              <button type="button" className="btn danger ghost" onClick={() => void remove()}>
+                {tr('modal.delete')}
+              </button>
+            )}
+            <span className="hint">{tr('modal.saveHint')}</span>
+            <button type="button" className="btn" onClick={requestClose}>
+              {tr('modal.cancel')}
             </button>
-          )}
-          <span className="hint">{tr('modal.saveHint')}</span>
-          <button type="button" className="btn" onClick={requestClose}>
-            {tr('modal.cancel')}
-          </button>
-          <button type="button" className="btn primary" onClick={save}>
-            {tr('modal.save')}
-          </button>
+            <button type="button" className="btn primary" onClick={() => void save()}>
+              {tr('modal.save')}
+            </button>
+          </div>
         </div>
-      </div>
-    </Dialog>
+      </Dialog>
+    </>
   );
 }

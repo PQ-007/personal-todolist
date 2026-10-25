@@ -164,7 +164,11 @@ export function SettingsDialog({ theme, onTheme, onClose }: Props) {
                   <div className={'st-status' + (connected ? ' ok' : '')}>
                     <span className="dot" aria-hidden="true" />
                     {t(connected ? 'set.connected' : 'set.notConnected')}
-                    {!connected && (
+                    {connected ? (
+                      <button type="button" className="linkbtn" onClick={() => void planner.disconnect()}>
+                        {t('auth.signOut')}
+                      </button>
+                    ) : (
                       <button type="button" className="btn primary" onClick={() => void planner.connect()}>
                         {t('auth.connect')}
                       </button>
@@ -213,6 +217,9 @@ export function SettingsDialog({ theme, onTheme, onClose }: Props) {
         </div>
 
         <footer className="st-foot">
+          <a className="st-privacy" href="/privacy.html" target="_blank" rel="noopener">
+            {t('set.privacy')}
+          </a>
           {dirty ? (
             <>
               <button type="button" className="btn" onClick={onClose}>

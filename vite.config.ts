@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'My Week',
-        short_name: 'My Week',
+        name: 'Calpis',
+        short_name: 'Calpis',
         description: 'Weekly planner backed by Google Calendar',
         start_url: '/',
         scope: '/',
@@ -27,8 +27,9 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallback: '/index.html',
-        // Never cache Google API or sign-in traffic in the service worker.
-        navigateFallbackDenylist: [/^\/__/],
+        // Never cache Google API or sign-in traffic in the service worker; /api/auth/* are
+        // page loads (sign-in redirects) that must reach the Netlify function.
+        navigateFallbackDenylist: [/^\/__/, /^\/api\//],
       },
     }),
   ],

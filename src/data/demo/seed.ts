@@ -15,6 +15,8 @@ interface Seed {
   notes?: string;
   /** Keep this task open even when it is already over (an overdue task). */
   open?: boolean;
+  /** An RRULE: the task is a repeating series starting on `day`. */
+  repeat?: string;
 }
 
 /**
@@ -56,7 +58,7 @@ const SEEDS: Seed[] = [
       '## Sources\n\n- [x] Export Google Ads data\n- [x] Export Yahoo Ads data\n- [ ] Merge sheets and check totals\n- [ ] Write the summary\n\n> Send before the **14:00** sync.\n\nTemplate: [reporting guide](https://example.com/guide)',
   },
   { day: 0, time: '14:00-15:00', title: 'Client sync', color: '11', label: 'work', notes: '- [ ] Share the weekly numbers\n- [ ] Agree on next month’s budget' },
-  { day: 0, time: '19:00-20:00', title: 'Gym: legs', color: '10', label: 'personal', notes: '- [ ] Squats 4×8\n- [ ] Lunges 3×10\n- [ ] Stretch' },
+  { day: 0, time: '19:00-20:00', title: 'Gym', color: '10', label: 'personal', notes: '- [ ] Warm up\n- [ ] Strength 40 min\n- [ ] Stretch', repeat: 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR' },
 
   // ---------- Tuesday ----------
   {
@@ -133,7 +135,8 @@ export function seedWeek(now = new Date()): Task[] {
       allDay: !s.time,
       start,
       end,
-      done: end <= now && !s.open,
+      done: !s.repeat && end <= now && !s.open,
+      ...(s.repeat ? { recurrence: [s.repeat] } : {}),
     };
   });
 }
