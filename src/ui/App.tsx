@@ -10,14 +10,13 @@ import { loadTheme, saveTheme, type Theme } from '../state/settings';
 import { CommandPalette, type Command } from './CommandPalette';
 import { ConfirmHost } from './confirm';
 import { ContextMenu, type MenuEntry, type MenuState } from './ContextMenu';
-import { FocusView, QUICK_ADD_ID } from './FocusView';
+import { FocusView } from './FocusView';
 import { isTyping, shortcutKey } from './keys';
 import { MiniCalendar } from './MiniCalendar';
 import { deleteTask } from './recurring';
 import { MonthView } from './MonthView';
 import { PlanPanel } from './PlanPanel';
 import { SettingsDialog } from './SettingsDialog';
-import { STACK_ADD_ID } from './StackPanel';
 import { TaskModal, type ModalTarget } from './TaskModal';
 import { TaskView } from './TaskView';
 import { slotTime, TimeGrid } from './TimeGrid';
@@ -73,15 +72,11 @@ export function App() {
 
   const open = (id: string) => setModal({ kind: 'view', id });
   const edit = (id: string) => setModal({ kind: 'edit', id });
-  const create = (start: Date = defaultStart(planner.get().day)) => setModal({ kind: 'new', start, label: labelFor(planner.get().filter) });
+  const create = (start: Date = defaultStart(planner.get().day), todo = false) =>
+    setModal({ kind: 'new', start, label: labelFor(planner.get().filter), todo });
+  const createTodo = () => create(undefined, true);
   const closeModal = useCallback(() => setModal(null), []);
   const toggleTheme = () => setTheme((th) => (th === 'dark' ? 'light' : 'dark'));
-  /** "n": the add box of whatever is on screen. */
-  const focusAdd = () => {
-    const id = planner.get().mode === 'focus' ? QUICK_ADD_ID : STACK_ADD_ID;
-    if (id === STACK_ADD_ID) planner.setStackOpen(true);
-    requestAnimationFrame(() => document.getElementById(id)?.focus());
-  };
 
   /** The actions for one calendar task (right-click, or the "…" button in focus mode). */
   const taskMenu = (task: Task): MenuEntry[] => [
@@ -159,7 +154,7 @@ export function App() {
       { id: 'plan', label: t('mode.plan'), icon: 'week', hint: 'P', group: 'actions', run: () => planner.setMode('plan') },
       { id: 'today', label: t('palette.goToday'), icon: 'day', hint: 'T', group: 'actions', run: () => planner.setDay(new Date()) },
       { id: 'new', label: t('new.task'), icon: 'plus', hint: 'C', group: 'actions', run: () => create() },
-      { id: 'todo', label: t('palette.addTodo'), icon: 'inbox', hint: 'N', group: 'actions', run: focusAdd },
+      { id: 'todo', label: t('palette.addTodo'), icon: 'inbox', hint: 'N', group: 'actions', run: createTodo },
       ...VIEWS.map((v) => ({
         id: 'view-' + v.view,
         label: t('palette.view', { name: t(v.label) }),
@@ -202,7 +197,7 @@ export function App() {
 
   // Shortcuts follow Google Calendar where they overlap: t today, d/x/w/m views (x is its custom view),
   // 1–7 for that many days, j/k or arrows to move, c to create. f/p switch modes, Ctrl/⌘+K or /
-  // opens the palette, n jumps to the add box. Ctrl/⌘+C and Ctrl/⌘+V copy the focused task and
+  // opens the palette, n adds a to-do. Ctrl/⌘+C and Ctrl/⌘+V copy the focused task and
   // paste it on the selected day; Delete removes it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -248,7 +243,7 @@ export function App() {
       else if (key === 'c') create();
       else if (key === 'n') {
         e.preventDefault();
-        focusAdd();
+        create(undefined, true);
       } else if (key === '/') {
         e.preventDefault();
         setPaletteOpen(true);
@@ -270,18 +265,18 @@ export function App() {
       />
       {mode === 'focus' ? (
         <main className="focus-main">
-          <FocusView onEdit={edit} onMenu={setMenu} onTaskMenu={openTaskMenu} />
+          <FocusView onEdit={edit} onMenu={setMenu} onTaskMenu={openTaskMenu} onAdd={(day) => create(defaultStart(day))} />
         </main>
       ) : (
         <div className={'plan' + (stackOpen ? ' with-panel' : '')}>
           <aside className="side" aria-label={t('day.today')}>
             <MiniCalendar />
-            <FocusView compact onEdit={edit} onMenu={setMenu} onTaskMenu={openTaskMenu} />
+            <FocusView compact onEdit={edit} onMenu={setMenu} onTaskMenu={openTaskMenu} onAdd={(day) => create(defaultStart(day))} />
           </aside>
           <main>
             {view === 'month' ? <MonthView onOpen={open} /> : <TimeGrid days={rangeDays(range)} onOpen={open} onCreate={create} />}
           </main>
-          {stackOpen && <PlanPanel onMenu={setMenu} />}
+          {stackOpen && <PlanPanel onMenu={setMenu} onAdd={createTodo} />}
         </div>
       )}
       {modal?.kind === 'view' && <TaskView key={modal.id} id={modal.id} onClose={closeModal} onEdit={() => edit(modal.id)} />}

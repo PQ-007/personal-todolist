@@ -1,7 +1,6 @@
 import { DEFAULT_COLOR } from './colors';
 import { addDays, addMin, overlapsDay, startOfDay } from './dates';
 import type { Label } from './labels';
-import { extractTags } from './tags';
 import type { NewTask, Task } from './types';
 
 /** A to-do without a time yet. It becomes a calendar task once it is scheduled. */
@@ -21,24 +20,6 @@ export const DEFAULT_MINUTES = 30;
 /** Lengths offered in the item menu. */
 export const LENGTHS = [15, 30, 45, 60, 90, 120];
 
-const LENGTH = /\s+(\d+(?:\.\d+)?)\s*(m|min|mins|h|hr|hrs)$/i;
-
-/**
- * "Write report #urgent 1.5h" → "Write report", tags ["urgent"], 90 minutes. #tags can go
- * anywhere; the length goes last. Without a length, 30 minutes.
- */
-export function parseStackInput(text: string): { title: string; minutes: number; tags: string[] } | null {
-  const { text: s, tags } = extractTags(text.trim());
-  if (!s) return null;
-  const m = LENGTH.exec(s);
-  if (m) {
-    const n = Number(m[1]);
-    const minutes = Math.round(/^h/i.test(m[2]!) ? n * 60 : n);
-    const title = s.slice(0, m.index).trim();
-    if (title && minutes >= 5 && minutes <= 24 * 60) return { title, minutes, tags };
-  }
-  return { title: s, minutes: DEFAULT_MINUTES, tags };
-}
 
 /** A stack item for a calendar task moved back to the stack; timed tasks keep their length. */
 export function itemFromTask(t: Task, id: string): StackItem {

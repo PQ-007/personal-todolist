@@ -4,6 +4,7 @@ import { addMin } from '../domain/dates';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
 import { LABELS, type Label } from '../domain/labels';
 import { parseRule, presetOf, presets, ruleLine, type Repeat } from '../domain/recurrence';
+import { DEFAULT_MINUTES, LENGTHS } from '../domain/stack';
 import { formatTags, parseTagField } from '../domain/tags';
 import type { Task } from '../domain/types';
 import {
@@ -15,7 +16,7 @@ import {
   validateRange,
   type WhenForm,
 } from '../domain/when';
-import { t as tr } from '../i18n';
+import { fmtDuration, t as tr } from '../i18n';
 import { planner } from '../state/planner';
 import { confirmDialog } from './confirm';
 import { Dialog } from './Dialog';
@@ -30,7 +31,11 @@ import { Rich } from './Rich';
 // CodeMirror is only needed once a task is being edited.
 const MarkdownEditor = lazy(() => import('./MarkdownEditor'));
 
-export type ModalTarget = { kind: 'view'; id: string } | { kind: 'edit'; id: string } | { kind: 'new'; start: Date; label?: Label };
+export type ModalTarget =
+  | { kind: 'view'; id: string }
+  | { kind: 'edit'; id: string }
+  /** `todo`: start as a to-do (no time, goes to the stack) rather than a calendar task. */
+  | { kind: 'new'; start: Date; label?: Label; todo?: boolean };
 
 interface Draft {
   title: string;
@@ -76,6 +81,9 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   const [showEnd, setShowEnd] = useState(() => isMultiDay(start.when));
   const titleRef = useRef<HTMLInputElement>(null);
   const isNew = !task;
+  // A new entry is either a calendar task or a to-do for the stack; one dialog adds both.
+  const [todo, setTodo] = useState(target.kind === 'new' && !!target.todo);
+  const [minutes, setMinutes] = useState(DEFAULT_MINUTES);
   // How it repeats. An occurrence doesn't carry its series' rule, so that is loaded first.
   const [{ repeat0, lines0 }] = useState(() => ({ repeat0: parseRule(task?.recurrence), lines0: task?.recurrence }));
   const [repeat, setRepeat] = useState<Repeat | null>(repeat0);
@@ -128,6 +136,14 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
     if (!title) {
       planner.toast(tr('modal.needTitle'));
       titleRef.current?.focus();
+      return;
+    }
+    if (todo) {
+      onClose();
+      const { colorId, label, description } = draft;
+      planner.addStackItem({ title, description, colorId, label, tags: parseTagField(draft.tagsText), minutes });
+      // Show where it went.
+      if (planner.get().mode === 'plan') planner.setStackOpen(true);
       return;
     }
     const range = rangeFromForm(draft.when);
@@ -212,6 +228,23 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
       <Dialog label={tr(isNew ? 'modal.new' : 'modal.details')} onRequestClose={requestClose}>
         <div className="mwrap" onKeyDown={onKeyDown}>
           <div className="mhead">
+            {isNew && (
+              <div className="segmented mkind" role="radiogroup" aria-label={tr('add.kind')}>
+                {([false, true] as const).map((isTodo) => (
+                  <button
+                    key={String(isTodo)}
+                    type="button"
+                    role="radio"
+                    aria-checked={todo === isTodo}
+                    className={'seg-opt' + (todo === isTodo ? ' on' : '')}
+                    onClick={() => setTodo(isTodo)}
+                  >
+                    <Icon name={isTodo ? 'inbox' : 'clock'} size={16} />
+                    {tr(isTodo ? 'add.todo' : 'add.event')}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="swatches" role="radiogroup" aria-label={tr('modal.color')}>
               {Object.entries(COLORS).map(([k, c]) => (
                 <button
@@ -226,9 +259,11 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
                 />
               ))}
             </div>
-            <label className="donechk">
-              <input type="checkbox" checked={draft.done} onChange={(e) => change({ done: e.target.checked })} /> {tr('modal.done')}
-            </label>
+            {!isNew && (
+              <label className="donechk">
+                <input type="checkbox" checked={draft.done} onChange={(e) => change({ done: e.target.checked })} /> {tr('modal.done')}
+              </label>
+            )}
             <button type="button" className="x" aria-label={tr('modal.close')} onClick={requestClose}>
               <Icon name="x" />
             </button>
@@ -242,8 +277,38 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
             value={draft.title}
             autoComplete="off"
             onChange={(e) => change({ title: e.target.value })}
+            onKeyDown={(e) => {
+              // Enter saves straight from the title (Ctrl/⌘+Enter is handled for the whole dialog).
+              if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !isImeKey(e)) {
+                e.preventDefault();
+                void save();
+              }
+            }}
           />
 
+          {todo ? (
+            <div className="mwhen mtodo">
+              <label className="mrepeat">
+                <Icon name="clock" size={16} />
+                <span className="sr-only">{tr('add.length')}</span>
+                <select
+                  value={minutes}
+                  onChange={(e) => {
+                    setMinutes(Number(e.target.value));
+                    setDirty(true);
+                  }}
+                >
+                  {LENGTHS.map((m) => (
+                    <option key={m} value={m}>
+                      {fmtDuration(m)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="mtodo-hint">{tr('add.todoHint')}</span>
+            </div>
+          ) : (
+            <>
           <div className="mwhen">
             <input
               type="date"
@@ -325,6 +390,8 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
               <option value="custom">{tr('rep.custom')}</option>
             </select>
           </label>
+            </>
+          )}
 
           <div className="mlabel" role="radiogroup" aria-label={tr('label.field')}>
             {[undefined, ...LABELS].map((l) => (

@@ -1,11 +1,9 @@
 import { useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { colorOf } from '../domain/colors';
 import { addMin, dayDiff, hm, overlapsDay, sameDay } from '../domain/dates';
-import { labelFor, matchesFilter } from '../domain/labels';
+import { matchesFilter } from '../domain/labels';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
-import { parseQuickAdd } from '../domain/quickAdd';
 import type { StackItem } from '../domain/stack';
-import { extractTags } from '../domain/tags';
 import type { Task } from '../domain/types';
 import { fmtDate, fmtDuration, t, type MsgKey } from '../i18n';
 import { planner, usePlanner } from '../state/planner';
@@ -13,14 +11,11 @@ import type { MenuState } from './ContextMenu';
 import { DoneButton } from './DoneButton';
 import { useNow } from './hooks';
 import { Icon } from './Icon';
-import { isImeKey } from './ime';
 import { LabelTag } from './LabelTag';
 import { repeats } from './recurring';
 import { MarkdownView } from './MarkdownView';
 import { stackItemMenu } from './stackMenu';
 import { TagChip } from './TagChip';
-
-export const QUICK_ADD_ID = 'quick-add';
 
 const RELATIVE: Record<number, MsgKey> = { [-1]: 'day.yesterday', 0: 'day.today', 1: 'day.tomorrow' };
 
@@ -48,6 +43,8 @@ interface Props {
   onMenu: (menu: MenuState) => void;
   /** Opens the task menu (the same one as right-clicking a task in the calendar). */
   onTaskMenu: (id: string, x: number, y: number) => void;
+  /** Opens the add dialog for this day. */
+  onAdd: (day: Date) => void;
   /**
    * The narrow version in plan mode's left sidebar: smaller type, and no to-do list (the
    * stack panel on the right shows it).
@@ -60,7 +57,7 @@ interface Props {
  * that opens in place (no dialog) when clicked. Used full-screen in focus mode and in the
  * left sidebar of plan mode.
  */
-export function FocusView({ onEdit, onMenu, onTaskMenu, compact }: Props) {
+export function FocusView({ onEdit, onMenu, onTaskMenu, onAdd, compact }: Props) {
   const { day, tasks: all, stack, filter, sync } = usePlanner();
   const now = useNow();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -155,7 +152,10 @@ export function FocusView({ onEdit, onMenu, onTaskMenu, compact }: Props) {
         </section>
       )}
 
-      <QuickAdd day={day} compact={compact} />
+      <button type="button" className="f-addbtn" aria-keyshortcuts="c" onClick={() => onAdd(day)}>
+        <Icon name="plus" />
+        {t('add.button')}
+      </button>
 
       {done.length > 0 && (
         <details className="f-section f-done">
@@ -338,45 +338,3 @@ function TodoRow({ item, day, isToday, now, onMenu }: TodoRowProps) {
   );
 }
 
-/**
- * One box for everything: a leading time ("14:00 Review PR", "9:30-11:00 Planning") puts it on
- * this day's calendar; anything else becomes a to-do. #tags and a trailing length work for both.
- */
-function QuickAdd({ day, compact }: { day: Date; compact?: boolean }) {
-  const [text, setText] = useState('');
-  const add = () => {
-    const { text: rest, tags } = extractTags(text);
-    const timed = parseQuickAdd(rest, day);
-    if (!timed) return;
-    if (timed.allDay) planner.addToStack(text);
-    else void planner.create({ ...timed, tags, label: labelFor(planner.get().filter) });
-    setText('');
-  };
-  return (
-    <div className="f-add">
-      <div className="f-add-box">
-        <Icon name="plus" />
-        <input
-          id={QUICK_ADD_ID}
-          type="text"
-          placeholder={t('focus.addPlaceholder')}
-          aria-label={t('focus.addPlaceholder')}
-          aria-describedby={compact ? undefined : 'f-add-hint'}
-          aria-keyshortcuts="n"
-          autoComplete="off"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !isImeKey(e)) add();
-            else if (e.key === 'Escape') e.currentTarget.blur();
-          }}
-        />
-      </div>
-      {!compact && (
-        <p id="f-add-hint" className="f-add-hint">
-          {t('focus.addHint')}
-        </p>
-      )}
-    </div>
-  );
-}

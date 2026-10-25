@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hm, ymd } from '../src/domain/dates';
-import { itemFromTask, nextFreeSlot, parseStackInput, taskFromItem, type StackItem } from '../src/domain/stack';
+import { itemFromTask, nextFreeSlot, taskFromItem, type StackItem } from '../src/domain/stack';
 import type { Task } from '../src/domain/types';
 
 const day = new Date(2026, 9, 22);
@@ -15,26 +15,6 @@ const at = (h1: number, m1: number, h2: number, m2: number, over: Partial<Task> 
   start: new Date(2026, 9, 22, h1, m1),
   end: new Date(2026, 9, 22, h2, m2),
   ...over,
-});
-
-describe('parseStackInput', () => {
-  it('reads an optional length at the end', () => {
-    expect(parseStackInput('Write report 1.5h')).toEqual({ title: 'Write report', minutes: 90, tags: [] });
-    expect(parseStackInput('Call the bank 15m')).toEqual({ title: 'Call the bank', minutes: 15, tags: [] });
-    expect(parseStackInput('Gym 45 min')).toEqual({ title: 'Gym', minutes: 45, tags: [] });
-    expect(parseStackInput('報告書を書く')).toEqual({ title: '報告書を書く', minutes: 30, tags: [] });
-    expect(parseStackInput('   ')).toBeNull();
-  });
-
-  it('pulls #tags out before reading the length', () => {
-    expect(parseStackInput('Write #urgent report #q4 1h')).toEqual({ title: 'Write report', minutes: 60, tags: ['urgent', 'q4'] });
-    expect(parseStackInput('#only')).toBeNull();
-  });
-
-  it('keeps a number that is only a title', () => {
-    expect(parseStackInput('1h')).toEqual({ title: '1h', minutes: 30, tags: [] });
-    expect(parseStackInput('Room 2m')).toEqual({ title: 'Room 2m', minutes: 30, tags: [] });
-  });
 });
 
 describe('nextFreeSlot', () => {

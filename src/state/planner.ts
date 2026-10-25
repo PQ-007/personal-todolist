@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from 'react';
 import { copyOf, placeCopy, weekCopies } from '../domain/clipboard';
-import { DEFAULT_COLOR } from '../domain/colors';
 import { addDays, dayDiff, hm, startOfDay, withTime } from '../domain/dates';
 import type { NewTask, Task } from '../domain/types';
 import { createDemoStore } from '../data/demo/demoStore';
@@ -9,8 +8,8 @@ import { createGoogleStore } from '../data/google/googleStore';
 import { createStackStore, type StackStore } from '../data/stackStore';
 import { AuthError, ConflictError, type TaskStore } from '../data/store';
 import { fmtDate, t as tr } from '../i18n';
-import { labelFor, matchesFilter, type LabelFilter } from '../domain/labels';
-import { itemFromTask, nextFreeSlot, parseStackInput, taskFromItem, type StackItem } from '../domain/stack';
+import { matchesFilter, type LabelFilter } from '../domain/labels';
+import { itemFromTask, nextFreeSlot, taskFromItem, type StackItem } from '../domain/stack';
 import { clampSpan, sameRange, stepDay, visibleRange, type DayRange, type View } from '../domain/views';
 import {
   loadFilter,
@@ -491,18 +490,9 @@ export class Planner {
 
   private newStackId = () => `s-${Date.now().toString(36)}-${++this.tmpSeq}`;
 
-  /** Adds a to-do from quick-add text ("Write report 1h"); it gets the label being shown. */
-  addToStack(text: string) {
-    const parsed = parseStackInput(text);
-    if (!parsed) return;
-    const item: StackItem = {
-      id: this.newStackId(),
-      ...parsed,
-      description: '',
-      colorId: DEFAULT_COLOR,
-      label: labelFor(this.state.filter),
-    };
-    this.setStack([...this.state.stack, item]);
+  /** Adds a to-do at the end of the stack. */
+  addStackItem(fields: Omit<StackItem, 'id'>) {
+    this.setStack([...this.state.stack, { id: this.newStackId(), ...fields }]);
   }
 
   updateStackItem(id: string, patch: Partial<Omit<StackItem, 'id'>>) {

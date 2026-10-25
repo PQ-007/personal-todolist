@@ -13,8 +13,6 @@ import { LabelTag } from './LabelTag';
 import { stackItemMenu } from './stackMenu';
 import { TagChip } from './TagChip';
 
-export const STACK_ADD_ID = 'stack-add';
-
 const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 /** What the inline editor shows: the title followed by its #tags. */
 const textOf = (item: StackItem) => [item.title, formatTags(item.tags)].filter(Boolean).join(' ');
@@ -23,9 +21,8 @@ const textOf = (item: StackItem) => [item.title, formatTags(item.tags)].filter(B
  * To-dos without a time: add them here, reorder them by dragging, and drag one onto the
  * calendar (or use its menu) to schedule it. Calendar cards dropped here move back.
  */
-export function StackPanel({ onMenu }: { onMenu: (menu: MenuState) => void }) {
+export function StackPanel({ onMenu, onAdd }: { onMenu: (menu: MenuState) => void; onAdd: () => void }) {
   const { stack, filter } = usePlanner();
-  const [text, setText] = useState('');
   const [renaming, setRenaming] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -34,12 +31,6 @@ export function StackPanel({ onMenu }: { onMenu: (menu: MenuState) => void }) {
   // A tag that no longer exists (renamed or removed) stops filtering.
   const activeTag = tagFilter && allTags.some((t) => sameTag(t, tagFilter)) ? tagFilter : null;
   const items = activeTag ? labelled.filter((s) => s.tags?.some((t) => sameTag(t, activeTag))) : labelled;
-
-  const add = () => {
-    // While filtering by a tag, new to-dos get that tag too, so they stay in view.
-    planner.addToStack(activeTag && text.trim() ? `${text} #${activeTag}` : text);
-    setText('');
-  };
 
   const saveText = (item: StackItem, value: string) => {
     const { text: title, tags } = extractTags(value);
@@ -81,24 +72,11 @@ export function StackPanel({ onMenu }: { onMenu: (menu: MenuState) => void }) {
       <div className="stack-head">
         <h2 id="stack-h">{t('stack.title')}</h2>
         {items.length > 0 && <span className="stack-count">{items.length}</span>}
+        <button type="button" className="iconbtn stack-addbtn" aria-label={t('palette.addTodo')} title={`${t('palette.addTodo')} (N)`} onClick={onAdd}>
+          <Icon name="plus" />
+        </button>
       </div>
 
-      <div className="padd stack-add">
-        <Icon name="plus" />
-        <input
-          id={STACK_ADD_ID}
-          type="text"
-          placeholder={t('stack.addPlaceholder')}
-          aria-label={t('stack.addLabel')}
-          autoComplete="off"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !isImeKey(e)) add();
-            else if (e.key === 'Escape') e.currentTarget.blur();
-          }}
-        />
-      </div>
 
       {allTags.length > 0 && (
         <div className="stack-tags" role="group" aria-label={t('tags.filter')}>
@@ -223,22 +201,14 @@ export function StackPanel({ onMenu }: { onMenu: (menu: MenuState) => void }) {
           </button>
         </div>
       ) : (
-        // Empty: explain both ways in and out, and show the quick-add syntax.
+        // Empty: explain both ways in and out.
         <div className="stack-empty">
           <Icon name="inbox" size={22} />
           <p className="stack-empty-title">{t('stack.empty')}</p>
           <p>{t('stack.emptyHint')}</p>
-          <button
-            type="button"
-            className="stack-example"
-            title={t('stack.addLabel')}
-            onClick={() => {
-              setText(t('stack.example'));
-              requestAnimationFrame(() => document.getElementById(STACK_ADD_ID)?.focus());
-            }}
-          >
-            <span>{t('stack.try')}</span>
-            {t('stack.example')}
+          <button type="button" className="btn" onClick={onAdd}>
+            <Icon name="plus" size={16} />
+            {t('palette.addTodo')}
           </button>
         </div>
       )}
