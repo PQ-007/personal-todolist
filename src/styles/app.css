@@ -466,6 +466,17 @@ dialog::backdrop{background:var(--backdrop);backdrop-filter:blur(2px)}
 .md li.task label{display:flex;gap:9px;align-items:flex-start;cursor:pointer}
 .md li.task input{margin-top:5px;width:16px;height:16px;accent-color:var(--accent);flex:none}
 .md li.task.done span{text-decoration:line-through;color:var(--muted)}
+/* reordering list items: a handle in the left gutter, and a line where it will land */
+.md.md-sortable{padding-left:22px}
+.md li.sortable{position:relative}
+.md-grip{position:absolute;top:.2em;right:calc(100% + 24px);display:grid;place-items:center;width:18px;height:1.3em;padding:0;border:0;border-radius:4px;background:none;color:var(--faint);cursor:grab;opacity:0;transition:opacity .12s}
+.md li.task > .md-grip{right:calc(100% + 2px)}
+.md li.sortable:hover > .md-grip,.md-grip:focus-visible{opacity:1}
+.md-grip:hover{color:var(--text);background:var(--hover)}
+.md li.dragging{opacity:.4}
+.md li.drop-before{box-shadow:0 -2px 0 var(--accent)}
+.md li.drop-after{box-shadow:0 2px 0 var(--accent)}
+@media (hover:none){.md-grip{opacity:.6}}
 .md code{background:var(--bg);border:1px solid var(--line);padding:0 5px;border-radius:4px;font:.88em var(--mono)}
 .md pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto}
 .md pre code{border:0;padding:0}

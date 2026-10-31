@@ -10,7 +10,9 @@ export const repeats = (task: Task) => !!(task.seriesId || task.recurrence?.leng
  * for all of them. `allowThis` is false when the change can only apply to the whole series
  * (e.g. how it repeats). Resolves to null when cancelled.
  */
-export function askScope(kind: 'edit' | 'delete', allowThis = true): Promise<'this' | 'all' | null> {
+export type Scope = 'this' | 'following' | 'all';
+
+export function askScope(kind: 'edit' | 'delete', allowThis = true): Promise<Scope | null> {
   return chooseDialog({
     title: t(kind === 'edit' ? 'rep.scopeEditTitle' : 'rep.scopeDeleteTitle'),
     message: allowThis ? undefined : t('rep.scopeHint'),
@@ -18,9 +20,10 @@ export function askScope(kind: 'edit' | 'delete', allowThis = true): Promise<'th
     danger: kind === 'delete',
     choices: [
       { id: 'this', label: t('rep.thisOne'), disabled: !allowThis },
+      { id: 'following', label: t('rep.following') },
       { id: 'all', label: t('rep.allOfThem') },
     ],
-  }) as Promise<'this' | 'all' | null>;
+  }) as Promise<Scope | null>;
 }
 
 /** Deletes a task; for a repeating one, after asking whether to delete this one or all of them. */
@@ -30,5 +33,6 @@ export async function deleteTask(id: string) {
   if (!repeats(task)) return planner.deleteWithUndo(id);
   const scope = await askScope('delete');
   if (scope === 'this') planner.deleteWithUndo(id);
+  else if (scope === 'following') await planner.deleteFollowing(task);
   else if (scope === 'all') await planner.deleteSeries(task);
 }

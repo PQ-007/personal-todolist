@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type KeyboardEvent, type MouseEvent } fro
 import { colorOf } from '../domain/colors';
 import { addMin, dayDiff, hm, overlapsDay, sameDay } from '../domain/dates';
 import { matchesFilter } from '../domain/labels';
+import { moveListItem } from '../domain/markdown/lists';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
 import type { StackItem } from '../domain/stack';
 import type { Task } from '../domain/types';
@@ -234,7 +235,11 @@ function TaskCard({ task, now, isToday, onEdit, onTaskMenu, hero, onCollapse }: 
       {task.description.trim() && (
         <div className="f-notes">
           {total > 0 && <p className="f-steps">{t('panel.steps', { done: dn, total })}</p>}
-          <MarkdownView source={task.description} onToggle={(line) => void planner.patch(task.id, { description: toggleTaskLine(task.description, line) })} />
+          <MarkdownView
+            source={task.description}
+            onToggle={(line) => void planner.patch(task.id, { description: toggleTaskLine(task.description, line) })}
+            onMove={(from, to, place) => void planner.patch(task.id, { description: moveListItem(task.description, from, to, place) })}
+          />
         </div>
       )}
       <div className="f-actions">

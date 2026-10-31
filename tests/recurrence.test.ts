@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hm, ymd } from '../src/domain/dates';
-import { nthOf, occurrences, parseRule, presetOf, presets, ruleLine, sameRepeat, type Repeat } from '../src/domain/recurrence';
+import { nthOf, occurrences, parseRule, presetOf, presets, ruleLine, sameRepeat, splitRule, type Repeat, withEnd } from '../src/domain/recurrence';
 
 const thu = new Date(2026, 9, 22, 9, 0); // Thursday, Oct 22 2026, 09:00
 const hour = 3600_000;
@@ -91,5 +91,31 @@ describe('occurrences', () => {
       '2026-10-22',
       '2026-10-23',
     ]);
+  });
+});
+
+describe('splitting a series ("this and following")', () => {
+  const start = new Date(2026, 9, 5, 9, 0); // Mon 5 Oct
+  const at = new Date(2026, 9, 12, 9, 0);
+
+  it('ends the first part the day before, keeping other parts as written', () => {
+    const { before, after } = splitRule(['RRULE:FREQ=WEEKLY;BYDAY=MO;X-ODD=1', 'EXDATE:20261005T000000Z'], start, at, true);
+    expect(before).toEqual(['RRULE:FREQ=WEEKLY;BYDAY=MO;X-ODD=1;UNTIL=20261011', 'EXDATE:20261005T000000Z']);
+    expect(after).toEqual(['RRULE:FREQ=WEEKLY;BYDAY=MO;X-ODD=1', 'EXDATE:20261005T000000Z']);
+  });
+
+  it('replaces an old end, and a timed series ends at the end of that day', () => {
+    const { before } = splitRule(['RRULE:FREQ=DAILY;UNTIL=20261231T145959Z'], start, at, false);
+    const until = /UNTIL=(\d{8}T\d{6}Z)$/.exec(before[0]!)![1]!;
+    expect(before[0]).not.toContain('20261231');
+    expect(parseRule(before)!.until).toEqual(new Date(2026, 9, 11));
+    expect(until.endsWith('Z')).toBe(true);
+  });
+
+  it('counts only what is left', () => {
+    const { before, after } = splitRule(['RRULE:FREQ=DAILY;COUNT=10'], start, at, false);
+    expect(parseRule(after)!.count).toBe(3);
+    expect(parseRule(before)!.count).toBeUndefined();
+    expect(withEnd(['RRULE:FREQ=DAILY;COUNT=10'], {}, false)).toEqual(['RRULE:FREQ=DAILY']);
   });
 });

@@ -1,4 +1,4 @@
-import { parseYmd, withTime, ymd } from '../../domain/dates';
+import { addDays, parseYmd, withTime, ymd } from '../../domain/dates';
 import { occurrences, parseRule } from '../../domain/recurrence';
 import type { NewTask, Task } from '../../domain/types';
 import type { TaskStore } from '../store';
@@ -106,7 +106,10 @@ export function createDemoStore(kv: KV = localStorage): TaskStore & { reset(): v
       const rows = load();
       if (rows.some((r) => r.id === prev.id)) {
         const e: Row = { ...next, id: prev.id };
-        save(rows.map((r) => (r.id === prev.id ? e : r)));
+        // Like Google Calendar: changed occurrences after a series' new end go with it.
+        const until = parseRule(e.recurrence)?.until;
+        const past = (r: Row) => !!until && r.seriesId === e.id && !!r.originalStart && r.originalStart >= addDays(until, 1);
+        save(rows.filter((r) => !past(r)).map((r) => (r.id === prev.id ? e : r)));
         return copy(e);
       }
       // First change to one occurrence of a series: keep it as its own row.

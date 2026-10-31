@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { COLORS, COLOR_NAMES, DEFAULT_COLOR } from '../domain/colors';
 import { addMin } from '../domain/dates';
+import { moveListItem } from '../domain/markdown/lists';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
 import { LABELS, type Label } from '../domain/labels';
 import { parseRule, presetOf, presets, ruleLine, type Repeat } from '../domain/recurrence';
@@ -167,6 +168,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
       if (!scope) return;
       onClose();
       if (scope === 'this') void planner.update({ ...cur, ...fields });
+      else if (scope === 'following') void planner.updateFollowing(cur, fields, recurrence);
       else void planner.updateSeries(cur, fields, recurrence);
       return;
     }
@@ -187,6 +189,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
     if (!scope) return;
     onClose();
     if (scope === 'this') planner.deleteWithUndo(task.id);
+    else if (scope === 'following') void planner.deleteFollowing(task);
     else void planner.deleteSeries(task);
   };
 
@@ -456,7 +459,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
           <div className="mbody" role="tabpanel">
             {tab === 'view' ? (
               draft.description.trim() ? (
-                <MarkdownView source={draft.description} onToggle={toggleLine} />
+                <MarkdownView source={draft.description} onToggle={toggleLine} onMove={(from, to, place) => change({ description: moveListItem(draft.description, from, to, place) })} />
               ) : (
                 <p className="empty">
                   <Rich text={tr('modal.noNotes')} parts={{ code: <code>- [ ] item</code> }} />

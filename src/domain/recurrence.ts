@@ -81,6 +81,44 @@ export function parseRule(lines: readonly string[] | undefined): Repeat | null {
 
 const ymdCompact = (d: Date) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
 
+/** UNTIL for a series ending on day `d`: the date for all-day series, else the end of that day in UTC. */
+function untilValue(d: Date, allDay: boolean): string {
+  if (allDay) return ymdCompact(d);
+  const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+  return end.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+/**
+ * The same rule with a new end: on day `until`, after `count` occurrences, or never. Other
+ * parts (and EXDATE lines) are kept as written, including ones this app can't edit.
+ */
+export function withEnd(lines: readonly string[], end: { until?: Date; count?: number }, allDay: boolean): string[] {
+  return lines.map((line) => {
+    if (!line.toUpperCase().startsWith('RRULE:')) return line;
+    const parts = line
+      .slice(6)
+      .split(';')
+      .filter((p) => !/^(COUNT|UNTIL)=/i.test(p));
+    if (end.count) parts.push(`COUNT=${end.count}`);
+    else if (end.until) parts.push(`UNTIL=${untilValue(end.until, allDay)}`);
+    return 'RRULE:' + parts.join(';');
+  });
+}
+
+/**
+ * Splitting a series at the occurrence first due at `at` ("this and following"): the rule for
+ * the part before it, which ends the day before, and the rule for the rest, which keeps the
+ * series' end (a COUNT only counts what is left).
+ */
+export function splitRule(lines: readonly string[], seriesStart: Date, at: Date, allDay: boolean): { before: string[]; after: string[] } {
+  const r = parseRule(lines);
+  const before = withEnd(lines, { until: addDays(startOfDay(at), -1) }, allDay);
+  if (!r?.count) return { before, after: [...lines] };
+  // Each occurrence counts as lasting 1 ms, so the first one (starting at `from`) is included.
+  const done = occurrences(r, seriesStart, 1, seriesStart, at).length;
+  return { before, after: withEnd(lines, { count: Math.max(1, r.count - done) }, allDay) };
+}
+
 /** The RRULE line for `r`. All-day series end on a date; timed ones at the end of that day (UTC). */
 export function ruleLine(r: Repeat, allDay: boolean): string {
   const p = [`FREQ=${r.freq}`];
@@ -88,13 +126,7 @@ export function ruleLine(r: Repeat, allDay: boolean): string {
   if (r.freq === 'WEEKLY' && r.byDay?.length) p.push(`BYDAY=${WEEK_ORDER.filter((d) => r.byDay!.includes(d)).join(',')}`);
   if (r.freq === 'MONTHLY' && r.nth) p.push(`BYDAY=${r.nth.n}${r.nth.day}`);
   if (r.count) p.push(`COUNT=${r.count}`);
-  else if (r.until) {
-    if (allDay) p.push(`UNTIL=${ymdCompact(r.until)}`);
-    else {
-      const end = new Date(r.until.getFullYear(), r.until.getMonth(), r.until.getDate(), 23, 59, 59);
-      p.push(`UNTIL=${end.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`);
-    }
-  }
+  else if (r.until) p.push(`UNTIL=${untilValue(r.until, allDay)}`);
   return 'RRULE:' + p.join(';');
 }
 

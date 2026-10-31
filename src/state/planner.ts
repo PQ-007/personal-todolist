@@ -9,6 +9,7 @@ import { createStackStore, type StackStore } from '../data/stackStore';
 import { AuthError, ConflictError, type TaskStore } from '../data/store';
 import { fmtDate, t as tr } from '../i18n';
 import { matchesFilter, type LabelFilter } from '../domain/labels';
+import { splitRule } from '../domain/recurrence';
 import { itemFromTask, nextFreeSlot, taskFromItem, type StackItem } from '../domain/stack';
 import { clampSpan, sameRange, stepDay, visibleRange, type DayRange, type View } from '../domain/views';
 import {
@@ -326,6 +327,58 @@ export class Planner {
       this.fail(e);
     }
     await this.refresh();
+  }
+
+  /**
+   * "This and following": the series stops the day before this occurrence, and a new series
+   * starts here with the edit (and `recurrence`; none makes it a single task). For the first
+   * occurrence that is the same as editing all of them.
+   */
+  async updateFollowing(occurrence: Task, next: NewTask, recurrence: string[] | undefined) {
+    const series = await this.seriesOf(occurrence);
+    if (!series?.recurrence) return;
+    const at = occurrence.originalStart ?? occurrence.start;
+    if (at <= series.start) return this.updateSeries(occurrence, next, recurrence);
+    const split = splitRule(series.recurrence, series.start, at, series.allDay);
+    // An unchanged rule continues where the old series stops (a COUNT counts what is left).
+    const rest = recurrence === series.recurrence || recurrence?.join('\n') === series.recurrence.join('\n') ? split.after : recurrence;
+    this.set({ sync: 'saving' });
+    try {
+      await this.store.update(series, { ...series, recurrence: split.before });
+      await this.store.create({ ...next, done: false, recurrence: rest, seriesId: undefined, originalStart: undefined, occurrenceKeys: undefined });
+      this.set({ sync: 'saved' });
+    } catch (e) {
+      this.fail(e);
+    }
+    await this.refresh();
+  }
+
+  /** Deletes this occurrence and the ones after it; undo restores the series' old end. */
+  async deleteFollowing(occurrence: Task) {
+    const series = await this.seriesOf(occurrence);
+    if (!series?.recurrence) return;
+    const at = occurrence.originalStart ?? occurrence.start;
+    if (at <= series.start) return this.deleteSeries(occurrence);
+    const { before } = splitRule(series.recurrence, series.start, at, series.allDay);
+    const restore = async () => {
+      try {
+        const cur = await this.store.getSeries(series.id);
+        await this.store.update(cur, { ...cur, recurrence: series.recurrence });
+      } catch (e) {
+        this.fail(e);
+      }
+      await this.refresh();
+    };
+    this.set({ tasks: this.state.tasks.filter((t) => !(t.seriesId === series.id && (t.originalStart ?? t.start) >= at)), sync: 'saving' });
+    try {
+      await this.store.update(series, { ...series, recurrence: before });
+      this.set({ sync: 'saved' });
+    } catch (e) {
+      this.fail(e);
+      return void this.refresh();
+    }
+    void this.refresh();
+    this.toast(tr('rep.deletedFollowing', { title: series.title }), { label: tr('toast.undo'), run: () => void restore() });
   }
 
   /** Deletes every occurrence of the task's series. Undo brings the series back. */

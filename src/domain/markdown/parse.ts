@@ -12,6 +12,8 @@ export type Inline =
 export interface ListItem {
   /** Nesting level (2 spaces or half a tab per level). */
   indent: number;
+  /** Source line index, used to toggle and move the item. */
+  line: number;
   /** Present for checklist items; `line` is the source line index used for toggling. */
   task?: { done: boolean; line: number };
   content: Inline[];
@@ -101,17 +103,18 @@ export function parseMarkdown(md: string): Block[] {
     if ((m = ln.match(TASK_LINE))) {
       listOf(false).items.push({
         indent: indentOf(m[1]!),
+        line: i,
         task: { done: m[2] !== ' ', line: i },
         content: parseInline(m[3] ?? ''),
       });
       continue;
     }
     if ((m = ln.match(BULLET_LINE))) {
-      listOf(false).items.push({ indent: indentOf(m[1]!), content: parseInline(m[2]!) });
+      listOf(false).items.push({ indent: indentOf(m[1]!), line: i, content: parseInline(m[2]!) });
       continue;
     }
     if ((m = ln.match(ORDERED_LINE))) {
-      listOf(true).items.push({ indent: indentOf(m[1]!), content: parseInline(m[2]!) });
+      listOf(true).items.push({ indent: indentOf(m[1]!), line: i, content: parseInline(m[2]!) });
       continue;
     }
     closeList();

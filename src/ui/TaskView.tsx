@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { colorOf } from '../domain/colors';
 import { addDays, addMin, hm, sameDay } from '../domain/dates';
+import { moveListItem } from '../domain/markdown/lists';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
 import { parseRule } from '../domain/recurrence';
 import type { Task } from '../domain/types';
@@ -136,6 +137,7 @@ export function TaskView({ id, onClose, onEdit }: { id: string; onClose: () => v
               <MarkdownView
                 source={task.description}
                 onToggle={(line) => void planner.patch(task.id, { description: toggleTaskLine(task.description, line) })}
+                onMove={(from, to, place) => void planner.patch(task.id, { description: moveListItem(task.description, from, to, place) })}
               />
             </div>
           ) : (
