@@ -134,3 +134,21 @@ describe('repeating events', () => {
     expect(patchBody(base, { ...base })).toEqual({});
   });
 });
+
+describe('reminders', () => {
+  it('reads custom reminders and leaves defaults unset', () => {
+    expect(fromGoogle(timed).reminders).toBeUndefined();
+    expect(fromGoogle({ ...timed, reminders: { useDefault: true } }).reminders).toBeUndefined();
+    expect(fromGoogle({ ...timed, reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 30 }, { method: 'popup', minutes: 10 }] } }).reminders).toEqual([10, 30]);
+    expect(fromGoogle({ ...timed, reminders: { useDefault: false } }).reminders).toEqual([]);
+  });
+
+  it('sends a change of reminders only, and goes back to the default', () => {
+    const t = fromGoogle(timed);
+    expect(patchBody(t, { ...t, reminders: [10] })).toEqual({ reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 10 }] } });
+    expect(patchBody({ ...t, reminders: [10] }, t)).toEqual({ reminders: { useDefault: true, overrides: [] } });
+    expect(patchBody(t, { ...t })).toEqual({});
+    expect(toGoogle({ ...t, reminders: [] }).reminders).toEqual({ useDefault: false, overrides: [] });
+    expect(toGoogle(t).reminders).toBeUndefined();
+  });
+});

@@ -14,6 +14,7 @@ const SYNC_TEXT: Record<SyncState, MsgKey | null> = {
   saving: 'sync.saving',
   saved: 'sync.saved',
   error: 'sync.error',
+  offline: 'sync.offline',
 };
 
 const MODES: { mode: Mode; label: MsgKey; icon: IconName; key: string }[] = [
@@ -57,7 +58,7 @@ interface Props {
 
 export function TopBar({ theme, onToggleTheme, onNew, onSettings, onPalette, onMenu }: Props) {
   const state = usePlanner();
-  const { mode, view, span, range, sync, needAuth, settings, filter, stack, stackOpen } = state;
+  const { mode, view, span, range, sync, needAuth, settings, filter, stack, stackOpen, unsent } = state;
   const plan = mode === 'plan';
   const weekly = view === 'workweek' || view === 'week';
   const syncKey = SYNC_TEXT[sync];
@@ -152,6 +153,7 @@ export function TopBar({ theme, onToggleTheme, onNew, onSettings, onPalette, onM
           aria-label={syncKey ? t(syncKey) : undefined}
         >
           {sync === 'error' && t('sync.error')}
+          {sync === 'offline' && (unsent ? t('sync.unsent', { n: unsent }) : t('sync.offline'))}
         </span>
 
         <span className="sp" />

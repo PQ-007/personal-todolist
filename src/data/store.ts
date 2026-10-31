@@ -12,6 +12,8 @@ export interface TaskStore {
   remove(id: string): Promise<void>;
   /** The series an occurrence belongs to (with its `recurrence`); the calendar only lists occurrences. */
   getSeries(id: string): Promise<Task>;
+  /** Tasks in [from, to) whose title or notes contain `query`, soonest first. */
+  search(query: string, from: Date, to: Date): Promise<Task[]>;
 }
 
 /** The user has to sign in (again) before the store can be used. */
@@ -19,6 +21,14 @@ export class AuthError extends Error {
   constructor(message = t('err.session')) {
     super(message);
     this.name = 'AuthError';
+  }
+}
+
+/** Google can't be reached (no connection). Changes are kept and sent later. */
+export class OfflineError extends Error {
+  constructor(message = t('err.offline')) {
+    super(message);
+    this.name = 'OfflineError';
   }
 }
 

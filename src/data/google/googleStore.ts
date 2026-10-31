@@ -1,6 +1,6 @@
 import type { NewTask, Task } from '../../domain/types';
 import { t } from '../../i18n';
-import { AuthError, ConflictError, type TaskStore } from '../store';
+import { AuthError, ConflictError, OfflineError, type TaskStore } from '../store';
 import { fromGoogle, isUsable, occurrenceProps, patchBody, toGoogle, type GEvent } from './mapping';
 
 const BASE = 'https://www.googleapis.com/calendar/v3';
@@ -19,7 +19,13 @@ export function createGoogleStore(opts: GoogleStoreOptions): TaskStore {
     const headers = new Headers(init.headers);
     headers.set('Authorization', `Bearer ${await opts.getToken()}`);
     if (init.body) headers.set('Content-Type', 'application/json');
-    const r = await fetch(BASE + path, { ...init, headers });
+    let r: Response;
+    try {
+      r = await fetch(BASE + path, { ...init, headers });
+    } catch {
+      // fetch only rejects when the request couldn't be made at all.
+      throw new OfflineError();
+    }
     if (r.status === 401) {
       opts.onUnauthorized?.();
       // Revoked or expired early: try once more with a renewed token (when one can be had).
@@ -35,26 +41,30 @@ export function createGoogleStore(opts: GoogleStoreOptions): TaskStore {
 
   const eventPath = (id: string) => `/calendars/${cal()}/events/${encodeURIComponent(id)}`;
 
+  async function listEvents(from: Date, to: Date, query?: string): Promise<Task[]> {
+    const out: Task[] = [];
+    let pageToken: string | undefined;
+    do {
+      const q = new URLSearchParams({
+        timeMin: from.toISOString(),
+        timeMax: to.toISOString(),
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '250',
+      });
+      if (query) q.set('q', query);
+      if (pageToken) q.set('pageToken', pageToken);
+      const j = await api<{ items?: GEvent[]; nextPageToken?: string }>(`/calendars/${cal()}/events?${q}`);
+      for (const g of j.items ?? []) if (isUsable(g)) out.push(fromGoogle(g));
+      pageToken = j.nextPageToken;
+      // A search only needs the first page.
+    } while (pageToken && !query);
+    return out;
+  }
+
   return {
     kind: 'google',
-    async list(from, to) {
-      const out: Task[] = [];
-      let pageToken: string | undefined;
-      do {
-        const q = new URLSearchParams({
-          timeMin: from.toISOString(),
-          timeMax: to.toISOString(),
-          singleEvents: 'true',
-          orderBy: 'startTime',
-          maxResults: '250',
-        });
-        if (pageToken) q.set('pageToken', pageToken);
-        const j = await api<{ items?: GEvent[]; nextPageToken?: string }>(`/calendars/${cal()}/events?${q}`);
-        for (const g of j.items ?? []) if (isUsable(g)) out.push(fromGoogle(g));
-        pageToken = j.nextPageToken;
-      } while (pageToken);
-      return out;
-    },
+    list: (from, to) => listEvents(from, to),
     async create(t: NewTask) {
       return fromGoogle(await api<GEvent>(`/calendars/${cal()}/events`, { method: 'POST', body: JSON.stringify(toGoogle(t)) }));
     },
@@ -81,5 +91,6 @@ export function createGoogleStore(opts: GoogleStoreOptions): TaskStore {
     async getSeries(id) {
       return fromGoogle(await api<GEvent>(eventPath(id)));
     },
+    search: (query, from, to) => listEvents(from, to, query),
   };
 }

@@ -3,10 +3,11 @@ import { copyOf, placeCopy, weekCopies } from '../domain/clipboard';
 import { addDays, dayDiff, hm, startOfDay, withTime } from '../domain/dates';
 import type { NewTask, Task } from '../domain/types';
 import { createDemoStore } from '../data/demo/demoStore';
-import { clearToken, ensureToken, getToken, restoreToken, signIn, signOut } from '../data/google/auth';
+import { authUnreachable, clearToken, ensureToken, getToken, restoreToken, signIn, signOut } from '../data/google/auth';
 import { createGoogleStore } from '../data/google/googleStore';
 import { createStackStore, type StackStore } from '../data/stackStore';
-import { AuthError, ConflictError, type TaskStore } from '../data/store';
+import { createOutbox, createTaskCache, queueChange, type Outbox, type Pending, type TaskCache } from '../data/offline';
+import { AuthError, ConflictError, OfflineError, type TaskStore } from '../data/store';
 import { fmtDate, t as tr } from '../i18n';
 import { matchesFilter, type LabelFilter } from '../domain/labels';
 import { splitRule } from '../domain/recurrence';
@@ -26,7 +27,8 @@ import {
   type Settings,
 } from './settings';
 
-export type SyncState = '' | 'loading' | 'saving' | 'saved' | 'error';
+/** `offline`: Google can't be reached; changes are kept in this browser until it can. */
+export type SyncState = '' | 'loading' | 'saving' | 'saved' | 'error' | 'offline';
 
 export interface ToastAction {
   label: string;
@@ -57,6 +59,8 @@ export interface PlannerState {
   stack: StackItem[];
   stackOpen: boolean;
   settings: Settings;
+  /** Changes made offline that haven't reached Google yet. */
+  unsent: number;
 }
 
 /**
@@ -64,6 +68,10 @@ export interface PlannerState {
  * the store call runs in the background, and a failure rolls that task back with a toast.
  * Changes to one task are sent one after another, each diffed against the last state the
  * server confirmed, so rapid edits never race or trip the etag check.
+ *
+ * Offline, changes stay on screen and wait in an outbox (one merged change per task, kept in
+ * this browser), and the days last loaded are shown from a cache. The outbox is sent when the
+ * connection comes back, or on the next start.
  */
 export class Planner {
   private state: PlannerState;
@@ -81,6 +89,13 @@ export class Planner {
   private toastSeq = 0;
   private tmpSeq = 0;
   private loadSeq = 0;
+  private cache!: TaskCache;
+  private outboxStore!: Outbox;
+  private outbox: Pending[] = [];
+  /** Set while Google can't be reached: changes go straight to the outbox. */
+  private offline = false;
+  private flushing = false;
+  private retryTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor() {
     restoreToken();
@@ -101,8 +116,11 @@ export class Planner {
       stackOpen: loadStackOpen(),
       filter: loadFilter(),
       settings: loadSettings(),
+      unsent: 0,
     };
     this.store = this.makeStore();
+    this.loadOffline();
+    globalThis.addEventListener?.('online', () => void this.reconnect());
     this.loadStack();
     // Back from a sign-in that Google or the auth function turned down.
     const authError = new URLSearchParams(location.search).get('auth');
@@ -127,6 +145,14 @@ export class Planner {
     this.listeners.forEach((l) => l());
   }
 
+  private loadOffline() {
+    const cal = this.state.settings.calendarId || 'primary';
+    this.cache = createTaskCache(cal);
+    this.outboxStore = createOutbox(cal);
+    this.outbox = this.state.settings.mode === 'google' ? this.outboxStore.load() : [];
+    this.set({ unsent: this.outbox.length });
+  }
+
   private makeStore(): TaskStore {
     const s = this.state.settings;
     return s.mode === 'google'
@@ -143,7 +169,8 @@ export class Planner {
 
   private fail(err: unknown) {
     if (err instanceof AuthError) this.set({ needAuth: true });
-    this.set({ sync: 'error' });
+    if (err instanceof OfflineError) this.goOffline();
+    this.set({ sync: err instanceof OfflineError ? 'offline' : 'error' });
     this.toast(err instanceof Error ? err.message : tr('err.generic'));
   }
 
@@ -151,22 +178,146 @@ export class Planner {
 
   async refresh() {
     const seq = ++this.loadSeq;
-    if (this.state.settings.mode === 'google' && !(await ensureToken())) {
+    const google = this.state.settings.mode === 'google';
+    if (google && !(await ensureToken())) {
       if (seq !== this.loadSeq) return;
+      if (authUnreachable()) return this.showOffline();
       this.server.clear();
       this.set({ needAuth: true, tasks: [] });
       return;
     }
     this.set({ needAuth: false, sync: 'loading' });
+    const { from, days } = this.state.range;
     try {
-      const { from, days } = this.state.range;
       const tasks = await this.store.list(from, addDays(from, days));
       if (seq !== this.loadSeq) return;
+      if (google) this.cache.put(from, days, tasks);
       this.server = new Map(tasks.map((t) => [t.id, t]));
-      this.set({ tasks, sync: '' });
+      this.set({ tasks: this.withUnsent(tasks), sync: '' });
+      if (this.offline) this.backOnline();
+      if (this.outbox.length) void this.flush();
     } catch (e) {
-      if (seq === this.loadSeq) this.fail(e);
+      if (seq !== this.loadSeq) return;
+      if (e instanceof OfflineError) this.showOffline();
+      else this.fail(e);
     }
+  }
+
+  /* ---------- offline ---------- */
+
+  /** The days on screen as last loaded, with the changes still waiting to be sent. */
+  private showOffline() {
+    const { from, days } = this.state.range;
+    const cached = this.cache.get(from, days);
+    if (cached) this.server = new Map(cached.map((t) => [t.id, t]));
+    this.set({ needAuth: false, tasks: this.withUnsent(cached ?? this.state.tasks) });
+    this.goOffline();
+  }
+
+  /** `tasks` as loaded, with the outbox's changes applied on top. */
+  private withUnsent(tasks: Task[]): Task[] {
+    const { from, days } = this.state.range;
+    const to = addDays(from, days);
+    let out = tasks;
+    for (const p of this.outbox) {
+      const ids = [p.key, p.base?.id, p.next?.id];
+      out = out.filter((t) => !ids.includes(t.id));
+      if (p.next && p.next.end > from && p.next.start < to) out = [...out, p.next];
+    }
+    return out;
+  }
+
+  private goOffline() {
+    if (!this.offline) this.toast(tr('offline.toast'));
+    this.offline = true;
+    this.set({ sync: 'offline' });
+    // `online` events aren't reliable (captive portals, flaky Wi-Fi): also try now and then.
+    this.retryTimer ??= setInterval(() => void this.reconnect(), 30_000);
+  }
+
+  private backOnline() {
+    this.offline = false;
+    clearInterval(this.retryTimer);
+    this.retryTimer = undefined;
+    if (this.state.sync === 'offline') this.set({ sync: '' });
+  }
+
+  /** Tries Google again: reloads the days on screen, which sends the outbox if it works. */
+  private async reconnect() {
+    if (this.state.settings.mode === 'google' && this.offline) await this.refresh();
+  }
+
+  private hold(change: Pending) {
+    this.outbox = queueChange(this.outbox, change);
+    this.outboxStore.save(this.outbox);
+    this.set({ unsent: this.outbox.length });
+    this.goOffline();
+  }
+
+  /**
+   * Sends a change, or keeps it in the outbox when offline (or when an earlier change to the
+   * same task is still waiting there, so they arrive in order). Null when kept.
+   */
+  private async sendOrHold<T>(change: Pending, send: () => Promise<T>): Promise<T | null> {
+    if (!this.offline && !this.outbox.some((p) => p.key === change.key)) {
+      try {
+        return await send();
+      } catch (e) {
+        if (!(e instanceof OfflineError)) throw e;
+      }
+    }
+    this.hold(change);
+    return null;
+  }
+
+  /** Sends what was changed offline, one task at a time, then reloads. */
+  private async flush() {
+    if (this.flushing || this.offline) return;
+    this.flushing = true;
+    let sent = 0;
+    try {
+      while (this.outbox.length && !this.offline) {
+        const p = this.outbox[0]!;
+        // Out of the outbox while it's sent: edits made meanwhile are queued after it as usual.
+        this.outbox = this.outbox.slice(1);
+        this.outboxStore.save(this.outbox);
+        try {
+          await this.enqueue(p.key, () => this.sendPending(p));
+          sent++;
+        } catch (e) {
+          if (e instanceof OfflineError) {
+            this.outbox = queueChange([p, ...this.outbox.filter((q) => q.key !== p.key)], this.outbox.find((q) => q.key === p.key) ?? p);
+            this.outboxStore.save(this.outbox);
+            this.goOffline();
+          } else {
+            // Changed or deleted elsewhere meanwhile: that version wins.
+            sent++;
+            this.toast(e instanceof Error ? e.message : tr('err.generic'));
+          }
+        }
+        this.set({ unsent: this.outbox.length });
+      }
+    } finally {
+      this.flushing = false;
+    }
+    if (sent) {
+      if (!this.outbox.length) this.toast(tr('offline.synced'));
+      void this.refresh();
+    }
+  }
+
+  private async sendPending({ key, base, next }: Pending) {
+    if (!next) {
+      if (base) await this.store.remove(this.realId(base.id));
+      this.server.delete(this.realId(key));
+      return;
+    }
+    const { id: _, etag: __, ...fields } = next;
+    const real = base ? await this.store.update(base, { ...next, id: this.realId(base.id) }) : await this.store.create(fields);
+    if (!base) this.alias.set(key, real.id);
+    this.server.set(real.id, real);
+    const shown = this.state.tasks.find((t) => t.id === key || t.id === real.id);
+    if (shown) this.replace(shown.id, { ...shown, id: real.id, etag: real.etag });
   }
 
   /** Applies a new view, day or span, loading the days on screen when they change. */
@@ -192,6 +343,35 @@ export class Planner {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Tasks whose title or notes contain `query`, from a year back to a year ahead, nearest to
+   * today first. A repeating task shows once, as its nearest occurrence. Empty on failure.
+   */
+  async search(query: string): Promise<Task[]> {
+    const now = new Date();
+    if (this.state.settings.mode === 'google' && !(await ensureToken())) return [];
+    let found: Task[];
+    try {
+      found = await this.store.search(query, addDays(now, -365), addDays(now, 365));
+    } catch {
+      return [];
+    }
+    const dist = (t: Task) => Math.abs(t.start.getTime() - now.getTime());
+    const nearest = new Map<string, Task>();
+    for (const t of found) {
+      const key = t.seriesId ?? t.id;
+      const seen = nearest.get(key);
+      if (!seen || dist(t) < dist(seen)) nearest.set(key, t);
+    }
+    return [...nearest.values()].sort((a, b) => dist(a) - dist(b));
+  }
+
+  /** Shows the day `task` is on, resolving once it's loaded (so the task can be opened). */
+  async goTo(task: Task) {
+    this.setDay(task.start);
+    if (!this.find(task.id)) await this.refresh();
   }
 
   setDay(day: Date) {
@@ -243,6 +423,8 @@ export class Planner {
     this.server.clear();
     this.store = this.makeStore();
     this.loadStack();
+    this.loadOffline();
+    this.backOnline();
     if (settings.mode === 'google' && !(await ensureToken())) await this.connect();
     else await this.refresh();
   }
@@ -313,11 +495,11 @@ export class Planner {
     const day = startOfDay(series.start);
     const start = next.allDay ? day : withTime(day, next.start.getHours(), next.start.getMinutes());
     const end = next.allDay ? addDays(day, Math.max(1, dayDiff(next.start, next.end))) : new Date(start.getTime() + (next.end.getTime() - next.start.getTime()));
-    const { title, description, colorId, label, tags, allDay } = next;
+    const { title, description, colorId, label, tags, allDay, reminders } = next;
     this.set({ sync: 'saving' });
     try {
       if (recurrence?.length) {
-        await this.store.update(series, { ...series, title, description, colorId, label, tags, allDay, start, end, recurrence });
+        await this.store.update(series, { ...series, title, description, colorId, label, tags, allDay, reminders, start, end, recurrence });
       } else {
         await this.store.remove(series.id);
         await this.store.create({ ...next, recurrence: undefined, seriesId: undefined, originalStart: undefined });
@@ -408,12 +590,16 @@ export class Planner {
 
   private async finishCreate(tmpId: string, input: NewTask): Promise<void> {
     try {
-      const { value: real, latest } = await this.enqueue(tmpId, async () => {
-        const real = await this.store.create(input);
-        this.alias.set(tmpId, real.id);
-        this.server.set(real.id, real);
-        return real;
-      });
+      const { value: real, latest } = await this.enqueue(tmpId, () =>
+        this.sendOrHold({ key: tmpId, base: null, next: { ...input, id: tmpId } }, async () => {
+          const real = await this.store.create(input);
+          this.alias.set(tmpId, real.id);
+          this.server.set(real.id, real);
+          return real;
+        }),
+      );
+      // Offline: it stays on screen under its temporary id until it's sent.
+      if (!real) return;
       const cur = this.state.tasks.find((t) => t.id === tmpId);
       // If the task was edited while being created, keep those edits (they are queued).
       this.replace(tmpId, latest || !cur ? real : { ...cur, id: real.id, etag: real.etag });
@@ -430,8 +616,10 @@ export class Planner {
     try {
       const { value: real, latest } = await this.enqueue(key, () => {
         const rid = this.realId(key);
-        return this.store.update(this.server.get(rid) ?? { ...next, id: rid }, { ...next, id: rid });
+        const base = this.server.get(rid);
+        return this.sendOrHold({ key, base: base ?? null, next: { ...next, id: rid } }, () => this.store.update(base ?? { ...next, id: rid }, { ...next, id: rid }));
       });
+      if (!real) return;
       this.server.set(real.id, real);
       if (latest) this.replace(this.realId(id), real);
     } catch (e) {
@@ -450,8 +638,14 @@ export class Planner {
     this.replace(id, null);
     const key = this.keyOf(id);
     try {
-      await this.enqueue(key, () => this.store.remove(this.realId(key)));
-      this.server.delete(this.realId(key));
+      const { value: sent } = await this.enqueue(key, () => {
+        const rid = this.realId(key);
+        return this.sendOrHold({ key, base: this.server.get(rid) ?? null, next: null }, async () => {
+          await this.store.remove(rid);
+          return true;
+        });
+      });
+      if (sent) this.server.delete(this.realId(key));
     } catch (e) {
       const rid = this.realId(key);
       this.set({ tasks: [...this.state.tasks, this.server.get(rid) ?? { ...before, id: rid }] });

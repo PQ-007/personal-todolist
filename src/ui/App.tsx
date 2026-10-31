@@ -16,6 +16,7 @@ import { MiniCalendar } from './MiniCalendar';
 import { deleteTask } from './recurring';
 import { MonthView } from './MonthView';
 import { PlanPanel } from './PlanPanel';
+import { ReviewDialog } from './ReviewDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { TaskModal, type ModalTarget } from './TaskModal';
 import { TaskView } from './TaskView';
@@ -52,6 +53,7 @@ export function App() {
   const [modal, setModal] = useState<ModalTarget | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -171,6 +173,7 @@ export function App() {
         run: () => planner.setFilter(f.filter),
       })),
       { id: 'panel', label: t('panel.toggle'), icon: 'panel', hint: 'S', group: 'actions', run: () => planner.setStackOpen(!state.stackOpen) },
+      { id: 'review', label: t('review.title'), icon: 'chart', hint: 'R', group: 'actions', run: () => setReviewOpen(true) },
       { id: 'copyweek', label: t('week.copyPrev'), icon: 'copy', group: 'actions', run: () => void planner.copyPreviousWeek() },
       { id: 'theme', label: t(theme === 'dark' ? 'theme.light' : 'theme.dark'), icon: theme === 'dark' ? 'sun' : 'moon', group: 'actions', run: toggleTheme },
       ...(Object.keys(LANGS) as Lang[]).map((l) => ({
@@ -183,21 +186,29 @@ export function App() {
       })),
       { id: 'settings', label: t('settings'), icon: 'settings', group: 'actions', run: () => setSettingsOpen(true) },
     ];
-    const found: Command[] = tasks.map((task) => ({
-      id: 'task-' + task.id,
-      label: task.title,
-      keywords: (task.tags ?? []).map((tag) => '#' + tag).join(' '),
-      hint: fmtDate(task.start, { weekday: 'short', month: 'short', day: 'numeric' }) + (task.allDay ? '' : ' ' + hm(task.start)),
-      icon: task.done ? 'check-circle' : 'clock',
-      group: 'tasks',
-      run: () => open(task.id),
-    }));
-    return [...found, ...actions];
+    return [...tasks.map((task) => taskCommand(task, 'tasks')), ...actions];
   };
+
+  const taskCommand = (task: Task, group: 'tasks' | 'found'): Command => ({
+    id: 'task-' + task.id,
+    label: task.title,
+    keywords: (task.tags ?? []).map((tag) => '#' + tag).join(' '),
+    hint: fmtDate(task.start, { weekday: 'short', month: 'short', day: 'numeric', ...(group === 'found' ? { year: 'numeric' } : {}) }) + (task.allDay ? '' : ' ' + hm(task.start)),
+    icon: task.done ? 'check-circle' : group === 'found' ? 'search' : 'clock',
+    group,
+    // A task found elsewhere in the calendar: go to its day first, then open it.
+    run: group === 'tasks' ? () => open(task.id) : () => void planner.goTo(task).then(() => planner.find(task.id) && open(task.id)),
+  });
+  const searchCalendar = useCallback(
+    async (q: string) => (await planner.search(q)).map((task) => taskCommand(task, 'found')),
+    // taskCommand only uses stable helpers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   // Shortcuts follow Google Calendar where they overlap: t today, d/x/w/m views (x is its custom view),
   // 1–7 for that many days, j/k or arrows to move, c to create. f/p switch modes, Ctrl/⌘+K or /
-  // opens the palette, n adds a to-do. Ctrl/⌘+C and Ctrl/⌘+V copy the focused task and
+  // opens the palette, n adds a to-do, r opens the week review. Ctrl/⌘+C and Ctrl/⌘+V copy the focused task and
   // paste it on the selected day; Delete removes it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -240,6 +251,7 @@ export function App() {
       else if (key === 'w') planner.setView('week');
       else if (key === 'm') planner.setView('month');
       else if (key === 's') planner.setStackOpen(!planner.get().stackOpen);
+      else if (key === 'r') setReviewOpen(true);
       else if (key === 'c') create();
       else if (key === 'n') {
         e.preventDefault();
@@ -265,7 +277,7 @@ export function App() {
       />
       {mode === 'focus' ? (
         <main className="focus-main">
-          <FocusView onEdit={edit} onMenu={setMenu} onTaskMenu={openTaskMenu} onAdd={(day) => create(defaultStart(day))} />
+          <FocusView onEdit={edit} onMenu={setMenu} onTaskMenu={openTaskMenu} onAdd={(day) => create(defaultStart(day))} onReview={() => setReviewOpen(true)} />
         </main>
       ) : (
         <div className={'plan' + (stackOpen ? ' with-panel' : '')}>
@@ -289,7 +301,8 @@ export function App() {
         />
       )}
       {settingsOpen && <SettingsDialog theme={theme} onTheme={setTheme} onClose={() => setSettingsOpen(false)} />}
-      {paletteOpen && <CommandPalette commands={commands()} onClose={closePalette} />}
+      {reviewOpen && <ReviewDialog onClose={() => setReviewOpen(false)} />}
+      {paletteOpen && <CommandPalette commands={commands()} search={searchCalendar} onClose={closePalette} />}
       {menu && <ContextMenu menu={menu} onClose={closeMenu} />}
       <ConfirmHost />
       <Toast />

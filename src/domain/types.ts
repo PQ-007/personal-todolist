@@ -17,6 +17,11 @@ export interface Task {
   label?: Label;
   /** Free-form tags without "#" (see tags.ts). */
   tags?: string[];
+  /**
+   * Popup reminders, in minutes before the start (all-day: before midnight). Unset means the
+   * calendar's default reminders; an empty list means none.
+   */
+  reminders?: number[];
   /** RRULE lines of a repeating series (see recurrence.ts); set on the series itself. */
   recurrence?: string[];
   /** On one occurrence of a series: the series' id, and when this occurrence was first due. */

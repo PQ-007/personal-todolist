@@ -1,5 +1,5 @@
 import { t } from '../../i18n';
-import { AuthError } from '../store';
+import { AuthError, OfflineError } from '../store';
 
 /**
  * Google sign-in. Where the auth function is deployed (netlify/functions/auth.ts), you sign in
@@ -79,13 +79,22 @@ export function clearToken() {
 
 export const hasToken = () => !!token && Date.now() < expiresAt;
 
+/** Set when the auth function couldn't be reached at all (offline), as opposed to saying no. */
+let unreachable = false;
+/** Whether the last sign-in check failed for lack of a connection rather than a session. */
+export const authUnreachable = () => unreachable;
+
 let serverCheck: Promise<boolean> | null = null;
 /** Whether the auth function is deployed and configured (false on the Vite dev server). */
 function hasServer(): Promise<boolean> {
   serverCheck ??= fetch(`${API}/status`, { headers: { Accept: 'application/json' } })
-    .then(async (r) => r.ok && !!r.headers.get('content-type')?.includes('json') && ((await r.json()) as { configured?: boolean }).configured === true)
+    .then(async (r) => {
+      unreachable = false;
+      return r.ok && !!r.headers.get('content-type')?.includes('json') && ((await r.json()) as { configured?: boolean }).configured === true;
+    })
     .catch(() => {
       // Offline: ask again next time.
+      unreachable = true;
       serverCheck = null;
       return false;
     });
@@ -100,7 +109,12 @@ let refreshing: Promise<boolean> | null = null;
 function refreshFromServer(): Promise<boolean> {
   refreshing ??= (async () => {
     try {
-      const r = await fetch(`${API}/refresh`, { method: 'POST' });
+      const r = await fetch(`${API}/refresh`, { method: 'POST' }).catch(() => {
+        unreachable = true;
+        return null;
+      });
+      if (!r) return false;
+      unreachable = false;
       if (r.status === 401) signedOut = true;
       const j = (await r.json().catch(() => ({}))) as TokenResponse;
       if (!r.ok || !j.access_token) return false;
@@ -122,9 +136,9 @@ export async function ensureToken(): Promise<boolean> {
   return refreshFromServer();
 }
 
-/** The current access token, or an AuthError when the user must sign in again. */
+/** The current access token, or an AuthError when the user must sign in again (OfflineError without a connection). */
 export async function getToken(): Promise<string> {
-  if (!(await ensureToken())) throw new AuthError();
+  if (!(await ensureToken())) throw unreachable ? new OfflineError() : new AuthError();
   return token!;
 }
 

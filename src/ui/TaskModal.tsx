@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { COLORS, COLOR_NAMES, DEFAULT_COLOR } from '../domain/colors';
-import { addMin } from '../domain/dates';
+import { addMin, parseYmd } from '../domain/dates';
+import { applyDateHint, parseDateHint } from '../domain/dateHint';
 import { moveListItem } from '../domain/markdown/lists';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
 import { LABELS, type Label } from '../domain/labels';
@@ -17,15 +18,18 @@ import {
   validateRange,
   type WhenForm,
 } from '../domain/when';
-import { fmtDuration, t as tr } from '../i18n';
+import { fmtDate, fmtDuration, t as tr } from '../i18n';
+import { templates, type Template } from '../data/templateStore';
 import { planner } from '../state/planner';
 import { confirmDialog } from './confirm';
+import { ContextMenu, type MenuEntry, type MenuState } from './ContextMenu';
 import { Dialog } from './Dialog';
 import { Icon } from './Icon';
 import { isImeKey } from './ime';
 import { MarkdownView } from './MarkdownView';
 import { askScope, repeats } from './recurring';
 import { RepeatDialog } from './RepeatDialog';
+import { ALL_DAY_REMINDERS, reminderText, remindersText, TIMED_REMINDERS } from './reminderText';
 import { describeRepeat } from './repeatText';
 import { Rich } from './Rich';
 
@@ -47,6 +51,8 @@ interface Draft {
   tagsText: string;
   done: boolean;
   when: WhenForm;
+  /** See Task.reminders: unset is the calendar's default. */
+  reminders?: number[];
 }
 
 function initial(target: ModalTarget): { task: Task | null; draft: Draft } {
@@ -55,7 +61,7 @@ function initial(target: ModalTarget): { task: Task | null; draft: Draft } {
     if (t) {
       return {
         task: t,
-        draft: { title: t.title, description: t.description, colorId: t.colorId, label: t.label, tagsText: formatTags(t.tags), done: t.done, when: formFromTask(t) },
+        draft: { title: t.title, description: t.description, colorId: t.colorId, label: t.label, tagsText: formatTags(t.tags), done: t.done, when: formFromTask(t), reminders: t.reminders },
       };
     }
   }
@@ -90,6 +96,10 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   const [repeat, setRepeat] = useState<Repeat | null>(repeat0);
   const [orig, setOrig] = useState({ repeat: repeat0, lines: lines0, ready: !task?.seriesId });
   const [customOpen, setCustomOpen] = useState(false);
+  // "Gym tomorrow 7pm": a date in a new task's title is offered until dismissed.
+  const [hintsOff, setHintsOff] = useState(false);
+  const hint = isNew && !todo && !hintsOff ? parseDateHint(draft.title, new Date()) : null;
+  const [tplMenu, setTplMenu] = useState<MenuState | null>(null);
 
   useEffect(() => {
     if (!task?.seriesId) return;
@@ -133,7 +143,9 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   const recurrenceLines = (allDay: boolean) => (!repeat ? undefined : repeat === orig.repeat && orig.lines ? orig.lines : [ruleLine(repeat, allDay)]);
 
   const save = async () => {
-    const title = draft.title.trim();
+    // A date hint still showing is taken as meant.
+    const src = hint ? { ...draft, title: hint.title, when: applyDateHint(draft.when, hint) } : draft;
+    const title = src.title.trim();
     if (!title) {
       planner.toast(tr('modal.needTitle'));
       titleRef.current?.focus();
@@ -147,13 +159,14 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
       if (planner.get().mode === 'plan') planner.setStackOpen(true);
       return;
     }
-    const range = rangeFromForm(draft.when);
+    const range = rangeFromForm(src.when);
     const err = validateRange(range);
     if (err) {
       planner.toast(tr(err));
       return;
     }
-    const fields = { title, description: draft.description, colorId: draft.colorId, label: draft.label, tags: parseTagField(draft.tagsText), done: draft.done, ...range };
+    const reminders = draft.reminders;
+    const fields = { title, description: draft.description, colorId: draft.colorId, label: draft.label, tags: parseTagField(draft.tagsText), done: draft.done, reminders, ...range };
     const recurrence = recurrenceLines(range.allDay);
     if (!task) {
       onClose();
@@ -207,12 +220,54 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
     }
   };
 
+  const applyHint = () => {
+    if (!hint) return;
+    setDraft((d) => ({ ...d, title: hint.title, when: applyDateHint(d.when, hint) }));
+    setDirty(true);
+    titleRef.current?.focus();
+  };
+  const hintForm = hint && applyDateHint(draft.when, hint);
+
+  /** A template's notes go after any already written; its title only fills an empty one. */
+  const applyTemplate = (tpl: Template) => {
+    setDraft((d) => ({
+      ...d,
+      title: d.title.trim() ? d.title : tpl.title,
+      description: d.description.trim() ? `${d.description.trimEnd()}\n\n${tpl.description}` : tpl.description,
+      colorId: tpl.colorId,
+      label: tpl.label,
+      tagsText: tpl.tags?.length ? formatTags(tpl.tags) : d.tagsText,
+    }));
+    setDirty(true);
+  };
+  const saveTemplate = () => {
+    const name = draft.title.trim() || draft.description.trim().split('\n')[0]!.replace(/^[-*#\s[\]x]+/i, '').slice(0, 60);
+    templates.add({ name, title: draft.title.trim(), description: draft.description, colorId: draft.colorId, label: draft.label, tags: parseTagField(draft.tagsText) });
+    planner.toast(tr('tpl.saved', { name }));
+  };
+  const openTemplates = (el: HTMLElement, deleting = false) => {
+    const list = templates.load();
+    const r = el.getBoundingClientRect();
+    const items: MenuEntry[] = deleting
+      ? list.map((tpl) => ({ label: tpl.name, icon: 'trash' as const, danger: true, onSelect: () => void templates.remove(tpl.id) }))
+      : [
+          ...list.map((tpl) => ({ label: tpl.name, icon: 'template' as const, onSelect: () => applyTemplate(tpl) })),
+          ...(list.length ? [{ kind: 'separator' as const }] : []),
+          { label: tr('tpl.save'), icon: 'plus', disabled: !draft.title.trim() && !draft.description.trim(), onSelect: saveTemplate },
+          ...(list.length ? [{ label: tr('tpl.delete'), icon: 'trash' as const, onSelect: () => requestAnimationFrame(() => openTemplates(el, true)) }] : []),
+        ];
+    setTplMenu({ x: r.left, y: r.bottom + 4, label: tr('tpl.title'), items });
+  };
+
   const { t, d } = countTasks(draft.description);
   const w = draft.when;
   const endVisible = showEnd || isMultiDay(w);
   const startAt = rangeFromForm(w).start;
   const repeatFrom = Number.isNaN(startAt.getTime()) ? new Date() : startAt;
   const repeatValue = presetOf(repeat, repeatFrom) ?? 'current';
+  const reminderChoices = w.allDay ? ALL_DAY_REMINDERS : TIMED_REMINDERS;
+  const rem = draft.reminders;
+  const reminderValue = !rem ? 'default' : !rem.length ? 'none' : rem.length === 1 && reminderChoices.includes(rem[0]!) ? String(rem[0]) : 'current';
 
   return (
     <>
@@ -288,6 +343,22 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
               }
             }}
           />
+
+          {hint && hintForm && (
+            <div className="mhint" role="status">
+              <Icon name="magic" size={15} />
+              <span>
+                {fmtDate(parseYmd(hintForm.startDate), { weekday: 'short', month: 'short', day: 'numeric' })}
+                {hint.start && ` · ${hintForm.startTime}–${hintForm.endTime}`}
+              </span>
+              <button type="button" className="linkbtn" onClick={applyHint}>
+                {tr('hint.use')}
+              </button>
+              <button type="button" className="linkbtn muted" onClick={() => setHintsOff(true)}>
+                {tr('hint.ignore')}
+              </button>
+            </div>
+          )}
 
           {todo ? (
             <div className="mwhen mtodo">
@@ -370,6 +441,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
             )}
           </div>
 
+          <div className="mopts">
           <label className="mrepeat">
             <Icon name="repeat" size={16} />
             <span className="sr-only">{tr('rep.label')}</span>
@@ -393,6 +465,29 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
               <option value="custom">{tr('rep.custom')}</option>
             </select>
           </label>
+
+          <label className="mrepeat">
+            <Icon name="bell" size={16} />
+            <span className="sr-only">{tr('rem.label')}</span>
+            <select
+              value={reminderValue}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === 'current') return;
+                change({ reminders: v === 'default' ? undefined : v === 'none' ? [] : [Number(v)] });
+              }}
+            >
+              <option value="default">{tr('rem.default')}</option>
+              <option value="none">{tr('rem.none')}</option>
+              {reminderChoices.map((m) => (
+                <option key={m} value={m}>
+                  {reminderText(m, w.allDay)}
+                </option>
+              ))}
+              {reminderValue === 'current' && <option value="current">{remindersText(rem, w.allDay)}</option>}
+            </select>
+          </label>
+          </div>
             </>
           )}
 
@@ -473,6 +568,16 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
           </div>
 
           <div className="mfoot">
+            <button
+              type="button"
+              className="btn ghost"
+              aria-haspopup="menu"
+              title={tr('tpl.title')}
+              onClick={(e) => openTemplates(e.currentTarget)}
+            >
+              <Icon name="template" size={16} />
+              <span className="btn-label">{tr('tpl.title')}</span>
+            </button>
             {!isNew && (
               <button type="button" className="btn danger ghost" onClick={() => void remove()}>
                 {tr('modal.delete')}
@@ -487,6 +592,7 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
             </button>
           </div>
         </div>
+        {tplMenu && <ContextMenu menu={tplMenu} onClose={() => setTplMenu(null)} />}
       </Dialog>
     </>
   );

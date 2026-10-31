@@ -46,6 +46,8 @@ interface Props {
   onTaskMenu: (id: string, x: number, y: number) => void;
   /** Opens the add dialog for this day. */
   onAdd: (day: Date) => void;
+  /** Opens the week review (focus mode only). */
+  onReview?: () => void;
   /**
    * The narrow version in plan mode's left sidebar: smaller type, and no to-do list (the
    * stack panel on the right shows it).
@@ -58,7 +60,7 @@ interface Props {
  * that opens in place (no dialog) when clicked. Used full-screen in focus mode and in the
  * left sidebar of plan mode.
  */
-export function FocusView({ onEdit, onMenu, onTaskMenu, onAdd, compact }: Props) {
+export function FocusView({ onEdit, onMenu, onTaskMenu, onAdd, onReview, compact }: Props) {
   const { day, tasks: all, stack, filter, sync } = usePlanner();
   const now = useNow();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -94,6 +96,11 @@ export function FocusView({ onEdit, onMenu, onTaskMenu, onAdd, compact }: Props)
     <div className={'focus' + (compact ? ' compact' : '')}>
       <header className="f-head">
         <h1>{dayName(day, now)}</h1>
+        {onReview && (
+          <button type="button" className="iconbtn f-review" aria-label={t('review.title')} title={`${t('review.title')} (R)`} aria-keyshortcuts="r" onClick={onReview}>
+            <Icon name="chart" />
+          </button>
+        )}
         <p className="f-date">
           {/* The heading is already the weekday unless it says Today, Tomorrow or Yesterday. */}
           {fmtDate(day, relative ? { weekday: compact ? 'short' : 'long', month: 'long', day: 'numeric' } : { month: 'long', day: 'numeric' })}

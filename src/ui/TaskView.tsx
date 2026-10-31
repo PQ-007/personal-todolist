@@ -13,6 +13,7 @@ import { LabelTag } from './LabelTag';
 import { isTyping, shortcutKey } from './keys';
 import { MarkdownView } from './MarkdownView';
 import { deleteTask, repeats } from './recurring';
+import { remindersText } from './reminderText';
 import { describeRepeat } from './repeatText';
 import { TagChip } from './TagChip';
 
@@ -116,6 +117,12 @@ export function TaskView({ id, onClose, onEdit }: { id: string; onClose: () => v
             <p className="tv-when tv-repeat">
               <Icon name="repeat" size={16} />
               {repeatText.text}
+            </p>
+          )}
+          {task.reminders && (
+            <p className="tv-when tv-repeat">
+              <Icon name="bell" size={16} />
+              {remindersText(task.reminders, task.allDay)}
             </p>
           )}
         </header>

@@ -25,6 +25,7 @@ export interface GEvent {
   recurringEventId?: string;
   originalStartTime?: GEventTime;
   recurrence?: string[];
+  reminders?: { useDefault?: boolean; overrides?: { method?: string; minutes: number }[] };
   extendedProperties?: { private?: Record<string, string>; shared?: Record<string, string> };
 }
 export type GEventBody = Partial<Omit<GEvent, 'id' | 'etag' | 'status'>>;
@@ -75,6 +76,7 @@ export function fromGoogle(g: GEvent): Task {
     colorId: g.colorId || DEFAULT_COLOR,
     done,
     ...(isLabel(label) ? { label } : {}),
+    ...(g.reminders?.useDefault === false ? { reminders: (g.reminders.overrides ?? []).map((o) => o.minutes).sort((a, b) => a - b) } : {}),
     ...(g.recurrence?.length ? { recurrence: g.recurrence } : {}),
     ...(g.recurringEventId ? { seriesId: g.recurringEventId } : {}),
     ...(g.originalStartTime ? { originalStart: g.originalStartTime.date ? parseYmd(g.originalStartTime.date) : new Date(g.originalStartTime.dateTime!) } : {}),
@@ -100,6 +102,10 @@ const privateOf = (t: NewTask) => ({
   tags: tagsToStorage(t.tags),
 });
 
+/** Google allows at most 5 reminders per event. */
+const remindersOf = (t: NewTask): GEventBody['reminders'] =>
+  t.reminders ? { useDefault: false, overrides: t.reminders.slice(0, 5).map((minutes) => ({ method: 'popup', minutes })) } : { useDefault: true, overrides: [] };
+
 /** Full body for creating an event. */
 export function toGoogle(t: NewTask): GEventBody {
   return {
@@ -109,6 +115,7 @@ export function toGoogle(t: NewTask): GEventBody {
     start: timeOf(t.allDay, t.start),
     end: timeOf(t.allDay, t.end),
     extendedProperties: { private: privateOf(t) },
+    ...(t.reminders ? { reminders: remindersOf(t) } : {}),
     ...(t.recurrence?.length ? { recurrence: t.recurrence } : {}),
   };
 }
@@ -123,6 +130,7 @@ export function patchBody(prev: Task, next: Task): GEventBody {
   if (next.description !== prev.description) b.description = next.description;
   if (next.colorId !== prev.colorId) b.colorId = next.colorId;
   if ((next.recurrence ?? []).join('\n') !== (prev.recurrence ?? []).join('\n')) b.recurrence = next.recurrence ?? [];
+  if (JSON.stringify(next.reminders) !== JSON.stringify(prev.reminders)) b.reminders = remindersOf(next);
   if (
     next.allDay !== prev.allDay ||
     next.start.getTime() !== prev.start.getTime() ||

@@ -132,6 +132,11 @@ export function createDemoStore(kv: KV = localStorage): TaskStore & { reset(): v
       if (!series) throw new Error('Series not found');
       return copy(series);
     },
+    async search(query, from, to) {
+      const q = query.toLocaleLowerCase();
+      const found = (await this.list(from, to)).filter((t) => `${t.title}\n${t.description}`.toLocaleLowerCase().includes(q));
+      return found.sort((a, b) => a.start.getTime() - b.start.getTime());
+    },
     reset() {
       kv.removeItem(DEMO_KEY);
       data = null;

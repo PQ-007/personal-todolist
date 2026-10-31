@@ -13,19 +13,24 @@ import {
   Calendar03Icon,
   Calendar05Icon,
   Cancel01Icon,
+  ChartColumnIcon,
   CheckmarkCircle02Icon,
   Clock01Icon,
   Copy01Icon,
   Copy02Icon,
   Delete02Icon,
+  FireIcon,
   DragDropVerticalIcon,
   Globe02Icon,
   Home03Icon,
   InboxIcon,
   InformationCircleIcon,
   Layers01Icon,
+  MagicWand01Icon,
   Moon02Icon,
   MoreHorizontalIcon,
+  Note01Icon,
+  Notification03Icon,
   PencilEdit02Icon,
   PlayIcon,
   RepeatIcon,
@@ -35,6 +40,7 @@ import {
   Sun03Icon,
   Target03Icon,
   Tick02Icon,
+  WifiOff01Icon,
 } from '@hugeicons/core-free-icons';
 
 /** The app's icons, from Hugeicons (free stroke set). Names describe the use, not the drawing. */
@@ -75,6 +81,12 @@ const ICONS = {
   grip: DragDropVerticalIcon,
   more: MoreHorizontalIcon,
   settings: Settings01Icon,
+  bell: Notification03Icon,
+  chart: ChartColumnIcon,
+  streak: FireIcon,
+  template: Note01Icon,
+  magic: MagicWand01Icon,
+  offline: WifiOff01Icon,
 } satisfies Record<string, IconSvgElement>;
 
 export type IconName = keyof typeof ICONS;
