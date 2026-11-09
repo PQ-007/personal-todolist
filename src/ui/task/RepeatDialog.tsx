@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { parseYmd, ymd } from '../domain/dates';
-import { nthOf, WEEK_ORDER, weekdayOf, type Freq, type Repeat, type Weekday } from '../domain/recurrence';
-import { addMonths } from '../domain/views';
-import { t, type MsgKey } from '../i18n';
-import { Dialog } from './Dialog';
-import { Icon } from './Icon';
+import { parseYmd, ymd } from '../../domain/dates';
+import { nthOf, WEEK_ORDER, weekdayOf, type Freq, type Repeat, type Weekday } from '../../domain/recurrence';
+import { addMonths } from '../../domain/views';
+import { t, type MsgKey } from '../../i18n';
+import { Dialog } from '../common/Dialog';
+import { Icon } from '../common/Icon';
 import { describeRepeat, weekdayName } from './repeatText';
 
 const UNITS: Record<Freq, [MsgKey, MsgKey]> = {

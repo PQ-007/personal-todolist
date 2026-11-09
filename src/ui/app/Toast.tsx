@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { t } from '../i18n';
-import { planner, usePlanner } from '../state/planner';
-import { Icon } from './Icon';
+import { t } from '../../i18n';
+import { planner, usePlanner } from '../../state/planner';
+import { Icon } from '../common/Icon';
 
 export function Toast() {
   const { toast } = usePlanner();

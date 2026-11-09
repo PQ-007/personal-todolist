@@ -1,12 +1,12 @@
 import type { MouseEvent } from 'react';
-import { addDays } from '../domain/dates';
-import { matchesFilter, type LabelFilter } from '../domain/labels';
-import { MAX_SPAN, type View } from '../domain/views';
-import { fmtDate, fmtRange, t, type MsgKey } from '../i18n';
-import { planner, usePlanner, type Mode, type PlannerState, type SyncState } from '../state/planner';
-import type { Theme } from '../state/settings';
-import type { MenuEntry, MenuState } from './ContextMenu';
-import { Icon, type IconName } from './Icon';
+import { addDays } from '../../domain/dates';
+import { matchesFilter, type LabelFilter } from '../../domain/labels';
+import { MAX_SPAN, type View } from '../../domain/views';
+import { fmtDate, fmtRange, t, type MsgKey } from '../../i18n';
+import { planner, usePlanner, type Mode, type PlannerState, type SyncState } from '../../state/planner';
+import type { Theme } from '../../state/settings';
+import type { MenuEntry, MenuState } from '../common/ContextMenu';
+import { Icon, type IconName } from '../common/Icon';
 
 const SYNC_TEXT: Record<SyncState, MsgKey | null> = {
   '': null,

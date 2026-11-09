@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { addDays, sameDay, startOfDay, ymd } from '../domain/dates';
-import { matchesFilter } from '../domain/labels';
-import type { Task } from '../domain/types';
-import { addMonths, monthGrid, rangeDays } from '../domain/views';
-import { fmtDate, t } from '../i18n';
-import { planner, usePlanner } from '../state/planner';
-import { useNow } from './hooks';
-import { Icon } from './Icon';
+import { addDays, sameDay, startOfDay, ymd } from '../../domain/dates';
+import { matchesFilter } from '../../domain/labels';
+import type { Task } from '../../domain/types';
+import { addMonths, monthGrid, rangeDays } from '../../domain/views';
+import { fmtDate, t } from '../../i18n';
+import { planner, usePlanner } from '../../state/planner';
+import { useNow } from '../common/hooks';
+import { Icon } from '../common/Icon';
 
 /** Days (yyyy-mm-dd) with at least one task. */
 function busyDays(tasks: Task[], from: Date, to: Date): Set<string> {

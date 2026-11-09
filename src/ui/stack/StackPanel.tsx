@@ -1,17 +1,17 @@
 import { useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
-import { colorVars } from '../domain/colors';
-import { matchesFilter } from '../domain/labels';
-import type { StackItem } from '../domain/stack';
-import { extractTags, formatTags, normalizeTags } from '../domain/tags';
-import { fmtDuration, t } from '../i18n';
-import { planner, usePlanner } from '../state/planner';
-import type { MenuState } from './ContextMenu';
-import { isStackDrag, STACK_MIME, stackDrag } from './dnd';
-import { Icon } from './Icon';
-import { isImeKey } from './ime';
-import { LabelTag } from './LabelTag';
+import { colorVars } from '../../domain/colors';
+import { matchesFilter } from '../../domain/labels';
+import type { StackItem } from '../../domain/stack';
+import { extractTags, formatTags, normalizeTags } from '../../domain/tags';
+import { fmtDuration, t } from '../../i18n';
+import { planner, usePlanner } from '../../state/planner';
+import type { MenuState } from '../common/ContextMenu';
+import { isStackDrag, STACK_MIME, stackDrag } from '../common/dnd';
+import { Icon } from '../common/Icon';
+import { isImeKey } from '../common/ime';
+import { LabelTag } from '../common/LabelTag';
 import { stackItemMenu } from './stackMenu';
-import { TagChip } from './TagChip';
+import { TagChip } from '../common/TagChip';
 
 const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 /** What the inline editor shows: the title followed by its #tags. */

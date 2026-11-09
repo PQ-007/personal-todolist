@@ -8,20 +8,20 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react';
-import { colorVars } from '../domain/colors';
-import { addDays, addMin, hm, overlapsDay, pad, sameDay, startOfDay, ymd } from '../domain/dates';
-import { fmtDate, fmtDuration, t as tr } from '../i18n';
-import { daySegments, layoutDay, type Placed, type TaskSegment } from '../domain/layout';
-import { countTasks } from '../domain/markdown/tasks';
-import { matchesFilter } from '../domain/labels';
-import type { Task } from '../domain/types';
-import { planner, usePlanner } from '../state/planner';
+import { colorVars } from '../../domain/colors';
+import { addDays, addMin, hm, overlapsDay, pad, sameDay, startOfDay, ymd } from '../../domain/dates';
+import { fmtDate, fmtDuration, t as tr } from '../../i18n';
+import { daySegments, layoutDay, type Placed, type TaskSegment } from '../../domain/layout';
+import { countTasks } from '../../domain/markdown/tasks';
+import { matchesFilter } from '../../domain/labels';
+import type { Task } from '../../domain/types';
+import { planner, usePlanner } from '../../state/planner';
 import { CREATE_SNAP_MIN, HPX, PPM, SNAP_MIN } from './constants';
-import { isStackDrag, overStack, stackDrag } from './dnd';
-import { useNow } from './hooks';
-import { Icon } from './Icon';
-import { LabelTag } from './LabelTag';
-import { repeats, saveMoved } from './recurring';
+import { isStackDrag, overStack, stackDrag } from '../common/dnd';
+import { useNow } from '../common/hooks';
+import { Icon } from '../common/Icon';
+import { LabelTag } from '../common/LabelTag';
+import { repeats, saveMoved } from '../task/recurring';
 
 interface Props {
   /** The consecutive days to show as columns. */

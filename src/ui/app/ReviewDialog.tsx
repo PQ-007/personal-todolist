@@ -1,12 +1,12 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { colorVars } from '../domain/colors';
-import { addDays, mondayOf, sameDay, ymd } from '../domain/dates';
-import { streaks, weekReview, type Streak } from '../domain/review';
-import type { Task } from '../domain/types';
-import { fmtDate, fmtRange, t } from '../i18n';
-import { planner } from '../state/planner';
-import { Dialog } from './Dialog';
-import { Icon } from './Icon';
+import { colorVars } from '../../domain/colors';
+import { addDays, mondayOf, sameDay, ymd } from '../../domain/dates';
+import { streaks, weekReview, type Streak } from '../../domain/review';
+import type { Task } from '../../domain/types';
+import { fmtDate, fmtRange, t } from '../../i18n';
+import { planner } from '../../state/planner';
+import { Dialog } from '../common/Dialog';
+import { Icon } from '../common/Icon';
 
 /** How far back streaks look. */
 const HISTORY_DAYS = 56;

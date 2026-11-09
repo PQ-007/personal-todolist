@@ -1,10 +1,10 @@
-import { COLORS, COLOR_ENDS, COLOR_NAMES } from '../domain/colors';
-import { addDays } from '../domain/dates';
-import { LABELS } from '../domain/labels';
-import { LENGTHS, type StackItem } from '../domain/stack';
-import { fmtDuration, t } from '../i18n';
-import { planner } from '../state/planner';
-import type { MenuEntry } from './ContextMenu';
+import { COLORS, COLOR_ENDS, COLOR_NAMES } from '../../domain/colors';
+import { addDays } from '../../domain/dates';
+import { LABELS } from '../../domain/labels';
+import { LENGTHS, type StackItem } from '../../domain/stack';
+import { fmtDuration, t } from '../../i18n';
+import { planner } from '../../state/planner';
+import type { MenuEntry } from '../common/ContextMenu';
 
 /** The actions for one to-do, shared by the focus view and the plan panel. */
 export function stackItemMenu(item: StackItem, onEditText?: () => void): MenuEntry[] {

@@ -1,13 +1,13 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
-import { colorVars } from '../domain/colors';
-import { hm, overlapsDay, sameDay, startOfDay, ymd } from '../domain/dates';
-import { matchesFilter } from '../domain/labels';
-import type { Task } from '../domain/types';
-import { rangeDays } from '../domain/views';
-import { fmtDate, t } from '../i18n';
-import { planner, usePlanner } from '../state/planner';
-import { isStackDrag, stackDrag } from './dnd';
-import { useNow } from './hooks';
+import { colorVars } from '../../domain/colors';
+import { hm, overlapsDay, sameDay, startOfDay, ymd } from '../../domain/dates';
+import { matchesFilter } from '../../domain/labels';
+import type { Task } from '../../domain/types';
+import { rangeDays } from '../../domain/views';
+import { fmtDate, t } from '../../i18n';
+import { planner, usePlanner } from '../../state/planner';
+import { isStackDrag, stackDrag } from '../common/dnd';
+import { useNow } from '../common/hooks';
 
 /** Sizes in px that decide how many tasks fit in a day cell (see .mcell, .mnum and .mchip). */
 const HEADER_H = 33;

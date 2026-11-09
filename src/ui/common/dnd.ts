@@ -1,4 +1,4 @@
-import type { StackItem } from '../domain/stack';
+import type { StackItem } from '../../domain/stack';
 
 /**
  * The to-do being dragged from the stack. HTML drag data can't be read during dragover, so

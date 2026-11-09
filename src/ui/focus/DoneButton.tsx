@@ -1,6 +1,6 @@
-import type { Task } from '../domain/types';
-import { t } from '../i18n';
-import { planner } from '../state/planner';
+import type { Task } from '../../domain/types';
+import { t } from '../../i18n';
+import { planner } from '../../state/planner';
 
 export function DoneButton({ task }: { task: Task }) {
   return (

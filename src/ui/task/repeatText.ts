@@ -1,6 +1,6 @@
-import { addDays, mondayOf } from '../domain/dates';
-import { WEEK_ORDER, type Repeat, type Weekday } from '../domain/recurrence';
-import { fmtDate, getLang, t, type MsgKey } from '../i18n';
+import { addDays, mondayOf } from '../../domain/dates';
+import { WEEK_ORDER, type Repeat, type Weekday } from '../../domain/recurrence';
+import { fmtDate, getLang, t, type MsgKey } from '../../i18n';
 
 /** A date that falls on `wd`, for formatting weekday names in the current language. */
 const dateOf = (wd: Weekday) => addDays(mondayOf(new Date(2026, 0, 5)), WEEK_ORDER.indexOf(wd));

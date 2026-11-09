@@ -4,8 +4,8 @@ import { LanguageSupport } from '@codemirror/language';
 import { EditorState, Prec, Transaction } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { useEffect, useRef } from 'react';
-import { insertLinePrefix, wrapSelection, type Edit } from '../domain/editing';
-import { t } from '../i18n';
+import { insertLinePrefix, wrapSelection, type Edit } from '../../domain/editing';
+import { t } from '../../i18n';
 import { livePreview } from './livePreview';
 
 interface Props {

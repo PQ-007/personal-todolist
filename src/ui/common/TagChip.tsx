@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { tagHue } from '../domain/tags';
+import { tagHue } from '../../domain/tags';
 
 /** A #tag in its own stable color. With `onClick` it is a button (e.g. to filter by the tag). */
 export function TagChip({ tag, active, title, onClick }: { tag: string; active?: boolean; title?: string; onClick?: () => void }) {

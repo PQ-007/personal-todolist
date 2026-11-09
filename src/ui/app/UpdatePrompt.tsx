@@ -1,6 +1,6 @@
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { t } from '../i18n';
-import { Icon } from './Icon';
+import { t } from '../../i18n';
+import { Icon } from '../common/Icon';
 
 /** Offers to reload when a new version of the app has been downloaded. */
 export function UpdatePrompt() {

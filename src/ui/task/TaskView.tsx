@@ -1,21 +1,21 @@
 import { useEffect, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { colorVars } from '../domain/colors';
-import { addDays, addMin, hm, sameDay } from '../domain/dates';
-import { moveListItem } from '../domain/markdown/lists';
-import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
-import { parseRule } from '../domain/recurrence';
-import type { Task } from '../domain/types';
-import { fmtDate, fmtDuration, t } from '../i18n';
-import { planner, usePlanner } from '../state/planner';
-import { Dialog } from './Dialog';
-import { Icon } from './Icon';
-import { LabelTag } from './LabelTag';
-import { isTyping, shortcutKey } from './keys';
-import { MarkdownView } from './MarkdownView';
+import { colorVars } from '../../domain/colors';
+import { addDays, addMin, hm, sameDay } from '../../domain/dates';
+import { moveListItem } from '../../domain/markdown/lists';
+import { countTasks, toggleTaskLine } from '../../domain/markdown/tasks';
+import { parseRule } from '../../domain/recurrence';
+import type { Task } from '../../domain/types';
+import { fmtDate, fmtDuration, t } from '../../i18n';
+import { planner, usePlanner } from '../../state/planner';
+import { Dialog } from '../common/Dialog';
+import { Icon } from '../common/Icon';
+import { LabelTag } from '../common/LabelTag';
+import { isTyping, shortcutKey } from '../common/keys';
+import { MarkdownView } from '../markdown/MarkdownView';
 import { deleteTask, repeats } from './recurring';
 import { remindersText } from './reminderText';
 import { describeRepeat } from './repeatText';
-import { TagChip } from './TagChip';
+import { TagChip } from '../common/TagChip';
 
 const DATE: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' };
 

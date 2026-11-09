@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { t } from '../i18n';
+import { t } from '../../i18n';
 import { Dialog } from './Dialog';
 import { Icon } from './Icon';
 

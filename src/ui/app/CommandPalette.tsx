@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
-import { t } from '../i18n';
-import { Dialog } from './Dialog';
-import { Icon, type IconName } from './Icon';
-import { isImeKey } from './ime';
+import { t } from '../../i18n';
+import { Dialog } from '../common/Dialog';
+import { Icon, type IconName } from '../common/Icon';
+import { isImeKey } from '../common/ime';
 
 export interface Command {
   id: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shortcutKey } from '../src/ui/keys';
+import { shortcutKey } from '../src/ui/common/keys';
 
 describe('shortcutKey', () => {
   it('uses the physical key, whatever the layout types', () => {

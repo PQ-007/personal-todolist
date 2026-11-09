@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { LANGS, setLang, t, useLang, type Lang } from '../i18n';
-import { planner, usePlanner } from '../state/planner';
-import type { Mode, Theme } from '../state/settings';
-import { confirmDialog } from './confirm';
-import { Dialog } from './Dialog';
-import { Icon, type IconName } from './Icon';
-import { Rich } from './Rich';
+import { LANGS, setLang, t, useLang, type Lang } from '../../i18n';
+import { planner, usePlanner } from '../../state/planner';
+import type { Mode, Theme } from '../../state/settings';
+import { confirmDialog } from '../common/confirm';
+import { Dialog } from '../common/Dialog';
+import { Icon, type IconName } from '../common/Icon';
+import { Rich } from '../common/Rich';
 
 interface Props {
   theme: Theme;

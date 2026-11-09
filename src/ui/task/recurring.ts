@@ -1,8 +1,8 @@
-import { copyOf } from '../domain/clipboard';
-import type { Task } from '../domain/types';
-import { t } from '../i18n';
-import { planner, type SeriesEdit } from '../state/planner';
-import { chooseDialog } from './confirm';
+import { copyOf } from '../../domain/clipboard';
+import type { Task } from '../../domain/types';
+import { t } from '../../i18n';
+import { planner, type SeriesEdit } from '../../state/planner';
+import { chooseDialog } from '../common/confirm';
 
 export const repeats = (task: Task) => !!(task.seriesId || task.recurrence?.length);
 
@@ -47,12 +47,20 @@ export async function saveMoved(task: Task, next: Task) {
   else await planner.updateSeries(task, move);
 }
 
-/** Deletes a task; for a repeating one, after asking whether to delete this one or all of them. */
-export async function deleteTask(id: string) {
+/**
+ * Deletes a task; for a repeating one, after asking whether to delete this one or all of them.
+ * `chosen` runs once it's decided (not when cancelled), before the task goes.
+ */
+export async function deleteTask(id: string, chosen?: () => void) {
   const task = planner.find(id);
   if (!task) return;
-  if (!repeats(task)) return planner.deleteWithUndo(id);
+  if (!repeats(task)) {
+    chosen?.();
+    return planner.deleteWithUndo(id);
+  }
   const scope = await askScope('delete');
+  if (!scope) return;
+  chosen?.();
   if (scope === 'this') planner.deleteWithUndo(id);
   else if (scope === 'following') await planner.deleteFollowing(task);
   else if (scope === 'all') await planner.deleteSeries(task);

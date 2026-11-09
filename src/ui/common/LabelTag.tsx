@@ -1,5 +1,5 @@
-import type { Label } from '../domain/labels';
-import { t } from '../i18n';
+import type { Label } from '../../domain/labels';
+import { t } from '../../i18n';
 import { Icon } from './Icon';
 
 /** A small work/personal tag. `iconOnly` fits it into tight spots like calendar cards. */

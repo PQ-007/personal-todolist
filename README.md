@@ -134,7 +134,14 @@ token and the Calendar REST API is called directly.
 
 ```text
 src/
-  ui/       React components; talk only to the planner (state/planner.ts)
+  ui/       React components, by feature; they talk only to the planner (state/planner.ts)
+              app/       the shell: App, top bar, command palette, settings, weekly review
+              calendar/  day/week time grid, month view, mini calendar
+              task/      the task dialog (split into its parts) and task view, repeat choices
+              focus/     the focus mode
+              stack/     the to-do stack
+              markdown/  notes editor and viewer
+              common/    shared pieces: icons, dialogs, menus, labels and tags
   state/    what the UI shows and does:
               planner.ts     the UI's entry point: view, navigation, settings, task actions
               days.ts        loading the days on screen (from the offline copy first)

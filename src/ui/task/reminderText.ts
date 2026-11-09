@@ -1,4 +1,4 @@
-import { fmtDuration, t } from '../i18n';
+import { fmtDuration, t } from '../../i18n';
 
 /** Reminder choices, in minutes before the start. */
 export const TIMED_REMINDERS = [0, 5, 10, 15, 30, 60, 120, 1440];

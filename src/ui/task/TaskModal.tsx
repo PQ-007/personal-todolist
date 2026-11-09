@@ -1,88 +1,35 @@
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { COLORS, COLOR_NAMES, DEFAULT_COLOR, colorVars } from '../domain/colors';
-import { addMin, parseYmd } from '../domain/dates';
-import { applyDateHint, parseDateHint } from '../domain/dateHint';
-import { moveListItem } from '../domain/markdown/lists';
-import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
-import { LABELS, type Label } from '../domain/labels';
-import { parseRule, presetOf, presets, ruleLine, type Repeat } from '../domain/recurrence';
-import { DEFAULT_MINUTES, LENGTHS } from '../domain/stack';
-import { formatTags, parseTagField } from '../domain/tags';
-import type { Task } from '../domain/types';
-import {
-  formFromTask,
-  isMultiDay,
-  rangeFromForm,
-  setAllDay,
-  setStartDate,
-  validateRange,
-  type WhenForm,
-} from '../domain/when';
-import { fmtDate, fmtDuration, t as tr } from '../i18n';
-import { planner, type Template } from '../state/planner';
-import { confirmDialog } from './confirm';
-import { ContextMenu, type MenuEntry, type MenuState } from './ContextMenu';
-import { Dialog } from './Dialog';
-import { Icon } from './Icon';
-import { isImeKey } from './ime';
-import { MarkdownView } from './MarkdownView';
-import { askScope, repeats } from './recurring';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { applyDateHint, parseDateHint } from '../../domain/dateHint';
+import { toggleTaskLine } from '../../domain/markdown/tasks';
+import { DEFAULT_MINUTES } from '../../domain/stack';
+import { isMultiDay, rangeFromForm, type WhenForm } from '../../domain/when';
+import { t as tr } from '../../i18n';
+import { planner } from '../../state/planner';
+import { confirmDialog } from '../common/confirm';
+import { Dialog } from '../common/Dialog';
+import { isImeKey } from '../common/ime';
+import { DateHintBar } from './DateHintBar';
+import { initialDraft, withTemplate, type Draft, type ModalTarget } from './draft';
+import { LabelPicker } from './LabelPicker';
+import { NotesTabs } from './NotesTabs';
+import { deleteTask } from './recurring';
 import { RepeatDialog } from './RepeatDialog';
-import { ALL_DAY_REMINDERS, reminderText, remindersText, TIMED_REMINDERS } from './reminderText';
-import { describeRepeat } from './repeatText';
-import { Rich } from './Rich';
+import { saveDraft } from './saveDraft';
+import { TaskHead } from './TaskHead';
+import { ReminderSelect, RepeatSelect, TodoLength } from './TaskOptions';
+import { TemplateButton } from './TemplateButton';
+import { useRepeat } from './useRepeat';
+import { WhenRow } from './WhenRow';
 
-// CodeMirror is only needed once a task is being edited.
-const MarkdownEditor = lazy(() => import('./MarkdownEditor'));
+export type { ModalTarget } from './draft';
 
-export type ModalTarget =
-  | { kind: 'view'; id: string }
-  | { kind: 'edit'; id: string }
-  /** `todo`: start as a to-do (no time, goes to the stack) rather than a calendar task. */
-  | { kind: 'new'; start: Date; label?: Label; todo?: boolean };
-
-interface Draft {
-  title: string;
-  description: string;
-  colorId: string;
-  label?: Label;
-  /** Tags as typed: "#report #urgent". */
-  tagsText: string;
-  done: boolean;
-  when: WhenForm;
-  /** See Task.reminders: unset is the calendar's default. */
-  reminders?: number[];
-}
-
-function initial(target: ModalTarget): { task: Task | null; draft: Draft } {
-  if (target.kind === 'edit') {
-    const t = planner.find(target.id);
-    if (t) {
-      return {
-        task: t,
-        draft: { title: t.title, description: t.description, colorId: t.colorId, label: t.label, tagsText: formatTags(t.tags), done: t.done, when: formFromTask(t), reminders: t.reminders },
-      };
-    }
-  }
-  const start = target.kind === 'new' ? target.start : new Date();
-  return {
-    task: null,
-    draft: {
-      title: '',
-      description: '',
-      colorId: DEFAULT_COLOR,
-      label: target.kind === 'new' ? target.label : undefined,
-      tagsText: '',
-      done: false,
-      when: formFromTask({ start, end: addMin(start, 60), allDay: false }),
-    },
-  };
-}
-
+/**
+ * Adding or editing a task (or adding a to-do). Holds the form; its parts are in this folder,
+ * saving is `saveDraft`. Closing with unsaved changes asks first.
+ */
 export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: () => void }) {
-  const [{ task, draft: start }] = useState(() => initial(target));
+  const [{ task, draft: start }] = useState(() => initialDraft(target, planner.find));
   const [draft, setDraft] = useState<Draft>(start);
-  const [tab, setTab] = useState<'view' | 'edit'>('edit');
   const [dirty, setDirty] = useState(false);
   const [showEnd, setShowEnd] = useState(() => isMultiDay(start.when));
   const titleRef = useRef<HTMLInputElement>(null);
@@ -90,29 +37,12 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   // A new entry is either a calendar task or a to-do for the stack; one dialog adds both.
   const [todo, setTodo] = useState(target.kind === 'new' && !!target.todo);
   const [minutes, setMinutes] = useState(DEFAULT_MINUTES);
-  // How it repeats. An occurrence doesn't carry its series' rule, so that is loaded first.
-  const [{ repeat0, lines0 }] = useState(() => ({ repeat0: parseRule(task?.recurrence), lines0: task?.recurrence }));
-  const [repeat, setRepeat] = useState<Repeat | null>(repeat0);
-  const [orig, setOrig] = useState({ repeat: repeat0, lines: lines0, ready: !task?.seriesId });
+  const repeat = useRepeat(task);
   const [customOpen, setCustomOpen] = useState(false);
   // "Gym tomorrow 7pm": a date in a new task's title is offered until dismissed.
   const [hintsOff, setHintsOff] = useState(false);
   const hint = isNew && !todo && !hintsOff ? parseDateHint(draft.title, new Date()) : null;
-  const [tplMenu, setTplMenu] = useState<MenuState | null>(null);
-
-  useEffect(() => {
-    if (!task?.seriesId) return;
-    let live = true;
-    void planner.seriesOf(task).then((series) => {
-      if (!live) return;
-      const r = parseRule(series?.recurrence);
-      setRepeat(r);
-      setOrig({ repeat: r, lines: series?.recurrence, ready: true });
-    });
-    return () => {
-      live = false;
-    };
-  }, [task]);
+  const hintForm = hint && applyDateHint(draft.when, hint);
 
   useEffect(() => {
     if (isNew) titleRef.current?.focus();
@@ -138,73 +68,15 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
     }).then((ok) => ok && onClose());
   };
 
-  /** The RRULE lines to save; an unchanged rule is kept exactly as stored (it may have parts we can't edit). */
-  const recurrenceLines = (allDay: boolean) => (!repeat ? undefined : repeat === orig.repeat && orig.lines ? orig.lines : [ruleLine(repeat, allDay)]);
+  const save = () =>
+    saveDraft(
+      // A date hint still showing is taken as meant.
+      { task, draft: hint ? { ...draft, title: hint.title, when: applyDateHint(draft.when, hint) } : draft, todo, minutes, repeat },
+      onClose,
+      () => titleRef.current?.focus(),
+    );
 
-  const save = async () => {
-    // A date hint still showing is taken as meant.
-    const src = hint ? { ...draft, title: hint.title, when: applyDateHint(draft.when, hint) } : draft;
-    const title = src.title.trim();
-    if (!title) {
-      planner.toast(tr('modal.needTitle'));
-      titleRef.current?.focus();
-      return;
-    }
-    if (todo) {
-      onClose();
-      const { colorId, label, description } = draft;
-      planner.addStackItem({ title, description, colorId, label, tags: parseTagField(draft.tagsText), minutes });
-      // Show where it went.
-      if (planner.get().mode === 'plan') planner.setStackOpen(true);
-      return;
-    }
-    const range = rangeFromForm(src.when);
-    const err = validateRange(range);
-    if (err) {
-      planner.toast(tr(err));
-      return;
-    }
-    const reminders = draft.reminders;
-    const fields = { title, description: draft.description, colorId: draft.colorId, label: draft.label, tags: parseTagField(draft.tagsText), done: draft.done, reminders, ...range };
-    const recurrence = recurrenceLines(range.allDay);
-    if (!task) {
-      onClose();
-      void planner.create({ ...fields, recurrence });
-      return;
-    }
-    const cur = planner.find(task.id) ?? task;
-    if (repeats(cur)) {
-      if (!orig.ready) return;
-      // A new rule can only apply to the whole series.
-      const scope = await askScope('edit', repeat === orig.repeat);
-      if (!scope) return;
-      onClose();
-      if (scope === 'this') void planner.update({ ...cur, ...fields });
-      else if (scope === 'following') void planner.updateFollowing(cur, () => ({ next: fields, recurrence }));
-      else void planner.updateSeries(cur, () => ({ next: fields, recurrence }));
-      return;
-    }
-    onClose();
-    // A task that starts repeating becomes a series.
-    if (recurrence) void planner.startRepeating({ ...cur, ...fields, recurrence });
-    else void planner.update({ ...cur, ...fields });
-  };
-
-  const remove = async () => {
-    if (!task) return;
-    if (!repeats(task)) {
-      onClose();
-      planner.deleteWithUndo(task.id);
-      return;
-    }
-    const scope = await askScope('delete');
-    if (!scope) return;
-    onClose();
-    if (scope === 'this') planner.deleteWithUndo(task.id);
-    else if (scope === 'following') void planner.deleteFollowing(task);
-    else void planner.deleteSeries(task);
-  };
-
+  /** Ticking a checklist item saves at once (unless the task is new). */
   const toggleLine = (line: number) => {
     const description = toggleTaskLine(draft.description, line);
     setDraft((d) => ({ ...d, description }));
@@ -219,63 +91,17 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
     }
   };
 
-  const applyHint = () => {
-    if (!hint) return;
-    setDraft((d) => ({ ...d, title: hint.title, when: applyDateHint(d.when, hint) }));
-    setDirty(true);
-    titleRef.current?.focus();
-  };
-  const hintForm = hint && applyDateHint(draft.when, hint);
-
-  /** A template's notes go after any already written; its title only fills an empty one. */
-  const applyTemplate = (tpl: Template) => {
-    setDraft((d) => ({
-      ...d,
-      title: d.title.trim() ? d.title : tpl.title,
-      description: d.description.trim() ? `${d.description.trimEnd()}\n\n${tpl.description}` : tpl.description,
-      colorId: tpl.colorId,
-      label: tpl.label,
-      tagsText: tpl.tags?.length ? formatTags(tpl.tags) : d.tagsText,
-    }));
-    setDirty(true);
-  };
-  const saveTemplate = () => {
-    const name = draft.title.trim() || draft.description.trim().split('\n')[0]!.replace(/^[-*#\s[\]x]+/i, '').slice(0, 60);
-    planner.addTemplate({ name, title: draft.title.trim(), description: draft.description, colorId: draft.colorId, label: draft.label, tags: parseTagField(draft.tagsText) });
-    planner.toast(tr('tpl.saved', { name }));
-  };
-  const openTemplates = (el: HTMLElement, deleting = false) => {
-    const list = planner.listTemplates();
-    const r = el.getBoundingClientRect();
-    const items: MenuEntry[] = deleting
-      ? list.map((tpl) => ({ label: tpl.name, icon: 'trash' as const, danger: true, onSelect: () => planner.removeTemplate(tpl.id) }))
-      : [
-          ...list.map((tpl) => ({ label: tpl.name, icon: 'template' as const, onSelect: () => applyTemplate(tpl) })),
-          ...(list.length ? [{ kind: 'separator' as const }] : []),
-          { label: tr('tpl.save'), icon: 'plus', disabled: !draft.title.trim() && !draft.description.trim(), onSelect: saveTemplate },
-          ...(list.length ? [{ label: tr('tpl.delete'), icon: 'trash' as const, onSelect: () => requestAnimationFrame(() => openTemplates(el, true)) }] : []),
-        ];
-    setTplMenu({ x: r.left, y: r.bottom + 4, label: tr('tpl.title'), items });
-  };
-
-  const { t, d } = countTasks(draft.description);
-  const w = draft.when;
-  const endVisible = showEnd || isMultiDay(w);
-  const startAt = rangeFromForm(w).start;
+  const startAt = rangeFromForm(draft.when).start;
   const repeatFrom = Number.isNaN(startAt.getTime()) ? new Date() : startAt;
-  const repeatValue = presetOf(repeat, repeatFrom) ?? 'current';
-  const reminderChoices = w.allDay ? ALL_DAY_REMINDERS : TIMED_REMINDERS;
-  const rem = draft.reminders;
-  const reminderValue = !rem ? 'default' : !rem.length ? 'none' : rem.length === 1 && reminderChoices.includes(rem[0]!) ? String(rem[0]) : 'current';
 
   return (
     <>
       {customOpen && (
         <RepeatDialog
           start={repeatFrom}
-          initial={repeat}
+          initial={repeat.repeat}
           onDone={(r) => {
-            setRepeat(r);
+            repeat.setRepeat(r);
             setDirty(true);
             setCustomOpen(false);
           }}
@@ -284,47 +110,16 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
       )}
       <Dialog label={tr(isNew ? 'modal.new' : 'modal.details')} onRequestClose={requestClose}>
         <div className="mwrap" onKeyDown={onKeyDown}>
-          <div className="mhead">
-            {isNew && (
-              <div className="segmented mkind" role="radiogroup" aria-label={tr('add.kind')}>
-                {([false, true] as const).map((isTodo) => (
-                  <button
-                    key={String(isTodo)}
-                    type="button"
-                    role="radio"
-                    aria-checked={todo === isTodo}
-                    className={'seg-opt' + (todo === isTodo ? ' on' : '')}
-                    onClick={() => setTodo(isTodo)}
-                  >
-                    <Icon name={isTodo ? 'inbox' : 'clock'} size={16} />
-                    {tr(isTodo ? 'add.todo' : 'add.event')}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="swatches" role="radiogroup" aria-label={tr('modal.color')}>
-              {Object.keys(COLORS).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  role="radio"
-                  aria-checked={k === draft.colorId}
-                  className={'sw' + (k === draft.colorId ? ' on' : '')}
-                  style={colorVars(k) as CSSProperties}
-                  aria-label={tr(COLOR_NAMES[k]!)}
-                  onClick={() => change({ colorId: k })}
-                />
-              ))}
-            </div>
-            {!isNew && (
-              <label className="donechk">
-                <input type="checkbox" checked={draft.done} onChange={(e) => change({ done: e.target.checked })} /> {tr('modal.done')}
-              </label>
-            )}
-            <button type="button" className="x" aria-label={tr('modal.close')} onClick={requestClose}>
-              <Icon name="x" />
-            </button>
-          </div>
+          <TaskHead
+            isNew={isNew}
+            todo={todo}
+            onTodo={setTodo}
+            colorId={draft.colorId}
+            onColor={(colorId) => change({ colorId })}
+            done={draft.done}
+            onDone={(done) => change({ done })}
+            onClose={requestClose}
+          />
 
           <input
             ref={titleRef}
@@ -344,167 +139,45 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
           />
 
           {hint && hintForm && (
-            <div className="mhint" role="status">
-              <Icon name="magic" size={15} />
-              <span>
-                {fmtDate(parseYmd(hintForm.startDate), { weekday: 'short', month: 'short', day: 'numeric' })}
-                {hint.start && ` · ${hintForm.startTime}–${hintForm.endTime}`}
-              </span>
-              <button type="button" className="linkbtn" onClick={applyHint}>
-                {tr('hint.use')}
-              </button>
-              <button type="button" className="linkbtn muted" onClick={() => setHintsOff(true)}>
-                {tr('hint.ignore')}
-              </button>
-            </div>
+            <DateHintBar
+              form={hintForm}
+              timed={!!hint.start}
+              onUse={() => {
+                change({ title: hint.title, when: hintForm });
+                titleRef.current?.focus();
+              }}
+              onIgnore={() => setHintsOff(true)}
+            />
           )}
 
           {todo ? (
-            <div className="mwhen mtodo">
-              <label className="mrepeat">
-                <Icon name="clock" size={16} />
-                <span className="sr-only">{tr('add.length')}</span>
-                <select
-                  value={minutes}
-                  onChange={(e) => {
-                    setMinutes(Number(e.target.value));
-                    setDirty(true);
-                  }}
-                >
-                  {LENGTHS.map((m) => (
-                    <option key={m} value={m}>
-                      {fmtDuration(m)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <span className="mtodo-hint">{tr('add.todoHint')}</span>
-            </div>
-          ) : (
-            <>
-          <div className="mwhen">
-            <input
-              type="date"
-              aria-label={tr(endVisible ? 'modal.startDate' : 'modal.date')}
-              value={w.startDate}
-              onChange={(e) => changeWhen((f) => setStartDate(f, e.target.value))}
-            />
-            {!w.allDay && (
-              <span className="timebox">
-                <input
-                  type="time"
-                  aria-label={tr('modal.startTime')}
-                  value={w.startTime}
-                  onChange={(e) => changeWhen((f) => ({ ...f, startTime: e.target.value }))}
-                />
-                –
-              </span>
-            )}
-            {endVisible && (
-              <span className="enddate">
-                {w.allDay && tr('modal.to')}
-                <input
-                  type="date"
-                  aria-label={tr('modal.endDate')}
-                  value={w.endDate}
-                  min={w.startDate}
-                  onChange={(e) => changeWhen((f) => ({ ...f, endDate: e.target.value }))}
-                />
-              </span>
-            )}
-            {!w.allDay && (
-              <span className="timebox">
-                <input
-                  type="time"
-                  aria-label={tr('modal.endTime')}
-                  value={w.endTime}
-                  onChange={(e) => changeWhen((f) => ({ ...f, endTime: e.target.value }))}
-                />
-              </span>
-            )}
-            <label>
-              <input
-                type="checkbox"
-                checked={w.allDay}
-                onChange={(e) => {
-                  changeWhen((f) => setAllDay(f, e.target.checked));
-                  setShowEnd(false);
-                }}
-              />{' '}
-              {tr('modal.allDay')}
-            </label>
-            {!endVisible && (
-              <button type="button" className="linkbtn" onClick={() => setShowEnd(true)}>
-                {tr(w.allDay ? 'modal.severalDays' : 'modal.endsAnotherDay')}
-              </button>
-            )}
-          </div>
-
-          <div className="mopts">
-          <label className="mrepeat">
-            <Icon name="repeat" size={16} />
-            <span className="sr-only">{tr('rep.label')}</span>
-            <select
-              value={repeatValue}
-              disabled={!orig.ready}
-              onChange={(e) => {
-                const id = e.target.value;
-                if (id === 'custom') return setCustomOpen(true);
-                if (id === 'current') return;
-                setRepeat(presets(repeatFrom).find((p) => p.id === id)?.repeat ?? null);
+            <TodoLength
+              minutes={minutes}
+              onChange={(m) => {
+                setMinutes(m);
                 setDirty(true);
               }}
-            >
-              {presets(repeatFrom).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {describeRepeat(p.repeat, repeatFrom)}
-                </option>
-              ))}
-              {repeatValue === 'current' && <option value="current">{describeRepeat(repeat, repeatFrom)}</option>}
-              <option value="custom">{tr('rep.custom')}</option>
-            </select>
-          </label>
-
-          <label className="mrepeat">
-            <Icon name="bell" size={16} />
-            <span className="sr-only">{tr('rem.label')}</span>
-            <select
-              value={reminderValue}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === 'current') return;
-                change({ reminders: v === 'default' ? undefined : v === 'none' ? [] : [Number(v)] });
-              }}
-            >
-              <option value="default">{tr('rem.default')}</option>
-              <option value="none">{tr('rem.none')}</option>
-              {reminderChoices.map((m) => (
-                <option key={m} value={m}>
-                  {reminderText(m, w.allDay)}
-                </option>
-              ))}
-              {reminderValue === 'current' && <option value="current">{remindersText(rem, w.allDay)}</option>}
-            </select>
-          </label>
-          </div>
+            />
+          ) : (
+            <>
+              <WhenRow when={draft.when} onChange={changeWhen} showEnd={showEnd} onShowEnd={setShowEnd} />
+              <div className="mopts">
+                <RepeatSelect
+                  repeat={repeat.repeat}
+                  from={repeatFrom}
+                  disabled={!repeat.ready}
+                  onChange={(r) => {
+                    repeat.setRepeat(r);
+                    setDirty(true);
+                  }}
+                  onCustom={() => setCustomOpen(true)}
+                />
+                <ReminderSelect reminders={draft.reminders} allDay={draft.when.allDay} onChange={(reminders) => change({ reminders })} />
+              </div>
             </>
           )}
 
-          <div className="mlabel" role="radiogroup" aria-label={tr('label.field')}>
-            {[undefined, ...LABELS].map((l) => (
-              <button
-                key={l ?? 'none'}
-                type="button"
-                role="radio"
-                aria-checked={draft.label === l}
-                className={'lblopt' + (l ? ' ' + l : '') + (draft.label === l ? ' on' : '')}
-                onClick={() => change({ label: l })}
-              >
-                {l && <Icon name={l} size={14} />}
-                {tr(l === 'work' ? 'label.work' : l === 'personal' ? 'label.personal' : 'label.none')}
-              </button>
-            ))}
-          </div>
+          <LabelPicker value={draft.label} onChange={(label) => change({ label })} />
 
           <label className="mtags">
             <span>{tr('tags.label')}</span>
@@ -518,67 +191,18 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
             />
           </label>
 
-          <div className="tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'edit'}
-              className={'tab' + (tab === 'edit' ? ' on' : '')}
-              onClick={() => {
-                setTab('edit');
-                requestAnimationFrame(() => document.getElementById('m-desc')?.focus());
-              }}
-            >
-              {tr('modal.editMarkdown')}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'view'}
-              className={'tab' + (tab === 'view' ? ' on' : '')}
-              onClick={() => setTab('view')}
-            >
-              {tr('modal.notes')}
-            </button>
-            {t > 0 && (
-              <div className="prog" aria-label={tr('modal.checklistProgress', { done: d, total: t })}>
-                <span>
-                  <i style={{ width: `${Math.round((d / t) * 100)}%` }} />
-                </span>
-                {tr('modal.doneCount', { done: d, total: t })}
-              </div>
-            )}
-          </div>
-
-          <div className="mbody" role="tabpanel">
-            {tab === 'view' ? (
-              draft.description.trim() ? (
-                <MarkdownView source={draft.description} onToggle={toggleLine} onMove={(from, to, place) => change({ description: moveListItem(draft.description, from, to, place) })} />
-              ) : (
-                <p className="empty">
-                  <Rich text={tr('modal.noNotes')} parts={{ code: <code>- [ ] item</code> }} />
-                </p>
-              )
-            ) : (
-              <Suspense fallback={<div className="mdedit" />}>
-                <MarkdownEditor value={draft.description} onChange={(description) => change({ description })} />
-              </Suspense>
-            )}
-          </div>
+          <NotesTabs value={draft.description} onChange={(description) => change({ description })} onToggle={toggleLine} />
 
           <div className="mfoot">
-            <button
-              type="button"
-              className="btn ghost"
-              aria-haspopup="menu"
-              title={tr('tpl.title')}
-              onClick={(e) => openTemplates(e.currentTarget)}
-            >
-              <Icon name="template" size={16} />
-              <span className="btn-label">{tr('tpl.title')}</span>
-            </button>
-            {!isNew && (
-              <button type="button" className="btn danger ghost" onClick={() => void remove()}>
+            <TemplateButton
+              draft={draft}
+              onApply={(tpl) => {
+                setDraft((d) => withTemplate(d, tpl));
+                setDirty(true);
+              }}
+            />
+            {task && (
+              <button type="button" className="btn danger ghost" onClick={() => void deleteTask(task.id, onClose)}>
                 {tr('modal.delete')}
               </button>
             )}
@@ -591,7 +215,6 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
             </button>
           </div>
         </div>
-        {tplMenu && <ContextMenu menu={tplMenu} onClose={() => setTplMenu(null)} />}
       </Dialog>
     </>
   );

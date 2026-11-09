@@ -1,8 +1,8 @@
 import { Fragment, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
-import type { Inline, ListItem } from '../domain/markdown/parse';
-import { parseMarkdown } from '../domain/markdown/parse';
-import { t } from '../i18n';
-import { Icon } from './Icon';
+import type { Inline, ListItem } from '../../domain/markdown/parse';
+import { parseMarkdown } from '../../domain/markdown/parse';
+import { t } from '../../i18n';
+import { Icon } from '../common/Icon';
 
 type Place = 'before' | 'after';
 const MIME = 'application/x-md-item';
