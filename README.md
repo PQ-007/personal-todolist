@@ -132,17 +132,27 @@ TypeScript, React and Vite, with `vite-plugin-pwa` for the installable, offline 
 No Google SDK: the sign-in function (or Google Identity Services, without it) issues the
 token and the Calendar REST API is called directly.
 
-```
+```text
 src/
-  domain/   pure logic, unit-tested: markdown parse/toggle/preview, Google-HTML → markdown,
-            overlap layout, date/time form, editor edits, search
+  ui/       React components; talk only to the planner (state/planner.ts)
+  state/    what the UI shows and does:
+              planner.ts     the UI's entry point: view, navigation, settings, task actions
+              days.ts        loading the days on screen (from the offline copy first)
+              todoStack.ts   the to-do stack
+              sync/          saving changes in the background while they show at once:
+                             per-task queues, offline outbox, repeating-task previews
   data/     TaskStore interface, Google store (the only code that calls fetch), Google
-            sign-in, demo store
-  state/    planner state with optimistic updates; settings and theme
-  ui/       React components
+            sign-in, demo store, offline copy and outbox, templates
+  domain/   pure logic, unit-tested: recurrence, markdown parse/toggle/preview,
+            Google-HTML → markdown, overlap layout, date/time form, editor edits, search
+  i18n/     translations (English, Mongolian, Japanese)
   styles/   the prototype's CSS
-tests/      Vitest tests for domain/ and data/
+tests/      Vitest tests for domain/, data/ and state/
 ```
+
+Each layer imports only the ones below it (`ui → state → data → domain`, with `i18n` usable
+by all and importing none of them). ESLint enforces this (see `eslint.config.js`), so a
+shortcut such as a component reading storage directly fails `npm run lint`.
 
 ### Data model
 

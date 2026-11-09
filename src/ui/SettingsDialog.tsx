@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { loadGis } from '../data/google/auth';
 import { LANGS, setLang, t, useLang, type Lang } from '../i18n';
 import { planner, usePlanner } from '../state/planner';
 import type { Mode, Theme } from '../state/settings';
@@ -124,7 +123,7 @@ export function SettingsDialog({ theme, onTheme, onClose }: Props) {
                   onClick={() => {
                     setMode(s.id);
                     // Preload Google's script so the sign-in popup opens straight from Save.
-                    if (s.id === 'google') loadGis().catch(() => {});
+                    if (s.id === 'google') planner.prepareSignIn();
                   }}
                 >
                   <span className="source-icon">

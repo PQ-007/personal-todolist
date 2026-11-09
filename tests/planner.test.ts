@@ -1,56 +1,75 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-// Signed in, as far as the planner can tell, so the Google paths (offline copy included) run.
-vi.mock('../src/data/google/auth', () => ({
-  authUnreachable: () => false,
-  clearToken: () => {},
-  ensureToken: async () => true,
-  getToken: async () => 'token',
-  restoreToken: () => {},
-  signIn: async () => {},
-  signOut: async () => {},
-}));
-
+import { beforeEach, describe, expect, it } from 'vitest';
+import { createDemoStore } from '../src/data/demo/demoStore';
 import { OfflineError, type TaskStore } from '../src/data/store';
 import { copyOf as copyOfTask } from '../src/domain/clipboard';
 import { startOfDay } from '../src/domain/dates';
 import type { NewTask, Task } from '../src/domain/types';
-import { Planner } from '../src/state/planner';
+import { Planner, type Auth } from '../src/state/planner';
+import { loadSettings } from '../src/state/settings';
 
 /**
- * Like Google: a write takes `writeMs` to land, and a read sees the data as it was when sent,
+ * A Google Calendar stand-in (the demo calendar underneath) whose connection the test controls.
+ * Like Google, a write takes `writeMs` to land, and a read sees the data as it was when sent,
  * answering `readMs` later.
  */
-function laggy(store: TaskStore, writeMs: number, readMs: number): TaskStore {
-  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  return new Proxy(store, {
-    get(target, key) {
-      const v = (target as unknown as Record<PropertyKey, unknown>)[key];
-      if (typeof v !== 'function') return v;
-      if (key === 'list') return async (...a: unknown[]) => { const r = await v.apply(target, a); await wait(readMs); return r; };
-      return async (...a: unknown[]) => { await wait(writeMs); return v.apply(target, a); };
+function network() {
+  const calendar = createDemoStore();
+  let writeMs = 0;
+  let readMs = 0;
+  let down = false;
+  const wait = (ms: number) => (ms ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+  const write = async <T>(send: () => Promise<T>): Promise<T> => {
+    if (down) throw new OfflineError();
+    await wait(writeMs);
+    return send();
+  };
+  const read = async <T>(send: () => Promise<T>): Promise<T> => {
+    if (down) throw new OfflineError();
+    const r = await send();
+    await wait(readMs);
+    return r;
+  };
+  const store: TaskStore = {
+    kind: 'google',
+    list: (from, to) => read(() => calendar.list(from, to)),
+    search: (q, from, to) => read(() => calendar.search(q, from, to)),
+    getSeries: (id) => write(() => calendar.getSeries(id)),
+    create: (t) => write(() => calendar.create(t)),
+    update: (prev, next) => write(() => calendar.update(prev, next)),
+    remove: (id) => write(() => calendar.remove(id)),
+  };
+  return {
+    store,
+    /** The calendar itself, as changed from another device. */
+    calendar,
+    lag(write: number, read: number) {
+      writeMs = write;
+      readMs = read;
     },
-  });
+    /** No connection. */
+    cut() {
+      down = true;
+    },
+  };
 }
 
-/** Every call fails as if there were no connection. */
-const unreachable = (store: TaskStore): TaskStore =>
-  new Proxy(store, {
-    get: (target, key) =>
-      typeof (target as unknown as Record<PropertyKey, unknown>)[key] === 'function'
-        ? async () => { throw new OfflineError(); }
-        : (target as unknown as Record<PropertyKey, unknown>)[key],
-  });
+/** Signed in, as far as the planner can tell. */
+const auth: Auth = {
+  restoreToken: () => {},
+  ensureToken: async () => true,
+  authUnreachable: () => false,
+  loadGis: async () => {},
+  signIn: async () => {},
+  signOut: async () => {},
+};
 
-/** A planner on the demo calendar, treated as Google (see the mock above). */
-async function planner(): Promise<{ p: Planner; inner: { store: TaskStore } }> {
+/** A planner on a Google calendar (see `network`), with the days on screen loaded. */
+async function planner(): Promise<{ p: Planner; net: ReturnType<typeof network> }> {
   localStorage.clear();
-  const p = new Planner();
-  const inner = p as unknown as { store: TaskStore; state: { settings: { mode: string } }; loadOffline(): void };
-  inner.state.settings = { ...inner.state.settings, mode: 'google' };
-  inner.loadOffline();
+  const net = network();
+  const p = new Planner({ settings: { ...loadSettings(), mode: 'google' }, makeStore: () => net.store, auth });
   await p.refresh();
-  return { p, inner };
+  return { p, net };
 }
 
 const task = (p: Planner, title: string, extra: Partial<NewTask> = {}): NewTask => {
@@ -64,8 +83,8 @@ beforeEach(() => localStorage.clear());
 
 describe('changes stay on screen while they are sent', () => {
   it('keeps a new task through a reload that overlaps its save', async () => {
-    const { p, inner } = await planner();
-    inner.store = laggy(inner.store, 300, 500);
+    const { p, net } = await planner();
+    net.lag(300, 500);
     const created = p.create(task(p, 'New'));
     const reload = p.refresh();
     await created;
@@ -75,9 +94,9 @@ describe('changes stay on screen while they are sent', () => {
   });
 
   it('keeps an edit through a reload while it is being saved', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     const t = p.get().tasks[0]!;
-    inner.store = laggy(inner.store, 300, 100);
+    net.lag(300, 100);
     const saved = p.update({ ...t, title: 'Edited' });
     await p.refresh();
     expect(titled(p, 'Edited')).toHaveLength(1);
@@ -86,9 +105,9 @@ describe('changes stay on screen while they are sent', () => {
   });
 
   it('keeps a deleted task hidden through a reload', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     const t = p.get().tasks[0]!;
-    inner.store = laggy(inner.store, 300, 100);
+    net.lag(300, 100);
     const removed = p.remove(t.id);
     await p.refresh();
     expect(p.find(t.id)).toBeUndefined();
@@ -98,11 +117,11 @@ describe('changes stay on screen while they are sent', () => {
 
 describe('repeating tasks', () => {
   it('shows a change to every occurrence before it is saved', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     await p.create(task(p, 'Daily', { recurrence: ['RRULE:FREQ=DAILY'] }));
     const days = p.get().range.days;
     expect(titled(p, 'Daily')).toHaveLength(days);
-    inner.store = laggy(inner.store, 300, 100);
+    net.lag(300, 100);
     const occ = titled(p, 'Daily')[0]!;
     const job = p.updateSeries(occ, (s) => ({ next: { ...occ, title: 'Renamed' }, recurrence: s.recurrence }));
     await Promise.resolve();
@@ -112,10 +131,10 @@ describe('repeating tasks', () => {
   });
 
   it('refuses to change a series offline instead of losing the change', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     await p.create(task(p, 'Daily', { recurrence: ['RRULE:FREQ=DAILY'] }));
     const occ = titled(p, 'Daily')[0]!;
-    inner.store = unreachable(inner.store);
+    net.cut();
     await p.refresh(); // finds out it's offline
     await p.deleteSeries(occ);
     expect(titled(p, 'Daily').length).toBeGreaterThan(0);
@@ -123,11 +142,11 @@ describe('repeating tasks', () => {
   });
 
   it('puts a series back on screen when saving it fails', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     await p.create(task(p, 'Daily', { recurrence: ['RRULE:FREQ=DAILY'] }));
     const occ = titled(p, 'Daily')[0]!;
     // Still counted as online: the connection drops while saving.
-    inner.store = unreachable(inner.store);
+    net.cut();
     await p.deleteSeries(occ);
     expect(titled(p, 'Daily').length).toBeGreaterThan(0);
   });
@@ -137,41 +156,41 @@ describe('repeating tasks, without waiting', () => {
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   it('brings deleted occurrences back at once on undo', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     await p.create(task(p, 'Daily', { recurrence: ['RRULE:FREQ=DAILY'] }));
     const days = p.get().range.days;
-    inner.store = laggy(inner.store, 300, 100);
+    net.lag(300, 100);
     const deleted = p.deleteSeries(titled(p, 'Daily')[0]!);
     expect(titled(p, 'Daily')).toHaveLength(0);
     p.get().toast!.action!.run();
     expect(titled(p, 'Daily')).toHaveLength(days);
     await deleted;
     // The undo's own save and reload.
-    await (p as unknown as { seriesQueue: Promise<void> }).seriesQueue;
+    await p.idle();
     expect(titled(p, 'Daily')).toHaveLength(days);
   });
 
   it('brings occurrences deleted from a day on back at once on undo', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     await p.create(task(p, 'Daily', { recurrence: ['RRULE:FREQ=DAILY'] }));
     const days = p.get().range.days;
-    inner.store = laggy(inner.store, 300, 100);
+    net.lag(300, 100);
     const third = [...titled(p, 'Daily')].sort((a, b) => +a.start - +b.start)[2]!;
     void p.deleteFollowing(third);
     expect(titled(p, 'Daily')).toHaveLength(2);
     p.get().toast!.action!.run();
     expect(titled(p, 'Daily')).toHaveLength(days);
-    await (p as unknown as { seriesQueue: Promise<void> }).seriesQueue;
+    await p.idle();
     expect(titled(p, 'Daily')).toHaveLength(days);
   });
 
   it('keeps an occurrence moved on its own where it is when only the text of all of them changes', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     await p.create(task(p, 'Daily', { recurrence: ['RRULE:FREQ=DAILY'] }));
     const second = [...titled(p, 'Daily')].sort((a, b) => +a.start - +b.start)[1]!;
     const later = new Date(second.start.getTime() + 3 * 36e5);
     await p.update({ ...second, start: later, end: new Date(later.getTime() + 36e5) });
-    inner.store = laggy(inner.store, 300, 100);
+    net.lag(300, 100);
     const occ = titled(p, 'Daily')[0]!;
     const job = p.updateSeries(occ, (s) => ({ next: { ...copyOfTask(s), title: 'Renamed' }, recurrence: s.recurrence }));
     await wait(0);
@@ -181,10 +200,10 @@ describe('repeating tasks, without waiting', () => {
   });
 
   it("doesn't say saved while a series change is still saving", async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     await p.create(task(p, 'Daily', { recurrence: ['RRULE:FREQ=DAILY'] }));
     const other = p.get().tasks.find((t) => t.title !== 'Daily')!;
-    inner.store = laggy(inner.store, 300, 100);
+    net.lag(300, 100);
     const job = p.deleteSeries(titled(p, 'Daily')[0]!);
     await p.update({ ...other, title: 'Quick edit' });
     expect(p.get().sync).toBe('saving');
@@ -194,14 +213,14 @@ describe('repeating tasks, without waiting', () => {
 
 describe('copying the previous week', () => {
   it("copies from last week as last loaded, without waiting for Google", async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     p.setView('week');
     p.step(-1);
     await p.refresh();
     await p.create(task(p, 'Last week only'));
     p.step(1);
     await p.refresh();
-    inner.store = laggy(inner.store, 300, 300);
+    net.lag(300, 300);
     void p.copyPreviousWeek();
     await new Promise((r) => setTimeout(r, 20));
     expect(titled(p, 'Last week only')).toHaveLength(1);
@@ -210,26 +229,26 @@ describe('copying the previous week', () => {
 
 describe('moving to other days', () => {
   it('shows days loaded before at once, before Google answers', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     const here: Task[] = p.get().tasks;
     expect(here.length).toBeGreaterThan(0);
     p.step(1);
     await p.refresh();
-    inner.store = laggy(inner.store, 0, 300);
+    net.lag(0, 300);
     p.step(-1);
     expect(p.get().tasks.map((t) => t.id).sort()).toEqual(here.map((t) => t.id).sort());
     await p.refresh();
   });
 
   it('shows them with the changes saved since they were loaded', async () => {
-    const { p, inner } = await planner();
+    const { p, net } = await planner();
     const [kept, gone] = p.get().tasks;
     await p.update({ ...kept!, title: 'Edited' });
     await p.remove(gone!.id);
     await p.create(task(p, 'Added'));
     p.step(1);
     await p.refresh();
-    inner.store = laggy(inner.store, 0, 300);
+    net.lag(0, 300);
     p.step(-1);
     expect(p.find(kept!.id)?.title).toBe('Edited');
     expect(p.find(gone!.id)).toBeUndefined();
@@ -240,12 +259,12 @@ describe('moving to other days', () => {
 
 describe('coming back to the tab', () => {
   it('shows changes made elsewhere meanwhile', async () => {
-    const { p, inner } = await planner();
-    await inner.store.create(task(p, 'From phone'));
+    const { p, net } = await planner();
+    await net.calendar.create(task(p, 'From phone'));
     expect(titled(p, 'From phone')).toHaveLength(0);
     document.dispatchEvent(new Event('visibilitychange'));
     // The reload the event started (not one started here).
-    await (p as unknown as { loading: Promise<void> }).loading;
+    await p.idle();
     expect(titled(p, 'From phone')).toHaveLength(1);
   });
 });

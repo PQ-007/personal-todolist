@@ -19,8 +19,7 @@ import {
   type WhenForm,
 } from '../domain/when';
 import { fmtDate, fmtDuration, t as tr } from '../i18n';
-import { templates, type Template } from '../data/templateStore';
-import { planner } from '../state/planner';
+import { planner, type Template } from '../state/planner';
 import { confirmDialog } from './confirm';
 import { ContextMenu, type MenuEntry, type MenuState } from './ContextMenu';
 import { Dialog } from './Dialog';
@@ -242,14 +241,14 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
   };
   const saveTemplate = () => {
     const name = draft.title.trim() || draft.description.trim().split('\n')[0]!.replace(/^[-*#\s[\]x]+/i, '').slice(0, 60);
-    templates.add({ name, title: draft.title.trim(), description: draft.description, colorId: draft.colorId, label: draft.label, tags: parseTagField(draft.tagsText) });
+    planner.addTemplate({ name, title: draft.title.trim(), description: draft.description, colorId: draft.colorId, label: draft.label, tags: parseTagField(draft.tagsText) });
     planner.toast(tr('tpl.saved', { name }));
   };
   const openTemplates = (el: HTMLElement, deleting = false) => {
-    const list = templates.load();
+    const list = planner.listTemplates();
     const r = el.getBoundingClientRect();
     const items: MenuEntry[] = deleting
-      ? list.map((tpl) => ({ label: tpl.name, icon: 'trash' as const, danger: true, onSelect: () => void templates.remove(tpl.id) }))
+      ? list.map((tpl) => ({ label: tpl.name, icon: 'trash' as const, danger: true, onSelect: () => planner.removeTemplate(tpl.id) }))
       : [
           ...list.map((tpl) => ({ label: tpl.name, icon: 'template' as const, onSelect: () => applyTemplate(tpl) })),
           ...(list.length ? [{ kind: 'separator' as const }] : []),

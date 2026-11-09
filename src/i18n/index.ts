@@ -1,5 +1,4 @@
 import { useSyncExternalStore } from 'react';
-import { loadLang, saveLang } from '../state/settings';
 import { en, type Messages, type MsgKey } from './en';
 import { ja } from './ja';
 import { mn } from './mn';
@@ -9,6 +8,30 @@ export const LANGS = { en: 'English', mn: 'Монгол', ja: '日本語' } as c
 export type Lang = keyof typeof LANGS;
 
 const MESSAGES: Record<Lang, Messages> = { en, mn, ja };
+
+const LANG_KEY = 'planner_lang';
+
+/** The saved language, else the browser's if supported, else the first of `supported`. */
+function loadLang<L extends string>(supported: L[]): L {
+  const is = (x: string | null | undefined): x is L => !!x && (supported as string[]).includes(x);
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem(LANG_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+  if (is(saved)) return saved;
+  const browser = globalThis.navigator?.languages?.map((l) => l.slice(0, 2)).find(is);
+  return browser ?? supported[0]!;
+}
+
+function saveLang(l: string) {
+  try {
+    localStorage.setItem(LANG_KEY, l);
+  } catch {
+    /* storage unavailable: the language lasts for this session only */
+  }
+}
 
 let lang: Lang = loadLang(Object.keys(LANGS) as Lang[]);
 const listeners = new Set<() => void>();
