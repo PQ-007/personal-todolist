@@ -81,6 +81,11 @@ export const ja: Messages = {
   'color.orange': 'オレンジ',
   'color.red': '赤',
   'color.gray': 'グレー',
+  'color.yellow': '黄',
+  'color.lime': 'ライム',
+  'color.teal': 'ティール',
+  'color.lavender': 'ラベンダー',
+  'color.pink': 'ピンク',
 
   'md.toolbar': '書式',
   'md.checklist': 'チェックリスト',

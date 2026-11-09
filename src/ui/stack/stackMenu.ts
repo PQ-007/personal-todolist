@@ -1,4 +1,4 @@
-import { COLORS, COLOR_ENDS, COLOR_NAMES } from '../../domain/colors';
+import { colorOptions } from '../../domain/colors';
 import { addDays } from '../../domain/dates';
 import { LABELS } from '../../domain/labels';
 import { LENGTHS, type StackItem } from '../../domain/stack';
@@ -25,7 +25,7 @@ export function stackItemMenu(item: StackItem, onEditText?: () => void): MenuEnt
       kind: 'swatches',
       label: t('modal.color'),
       value: item.colorId,
-      options: Object.entries(COLORS).map(([id, color]) => ({ id, color, color2: COLOR_ENDS[id], name: t(COLOR_NAMES[id]!) })),
+      options: colorOptions(t),
       onSelect: (colorId) => planner.updateStackItem(item.id, { colorId }),
     },
     { kind: 'separator' },

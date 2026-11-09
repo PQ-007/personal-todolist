@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { COLORS, COLOR_NAMES, colorVars } from '../../domain/colors';
+import { COLOR_IDS, COLOR_NAMES, colorVars } from '../../domain/colors';
 import { t as tr } from '../../i18n';
 import { Icon } from '../common/Icon';
 
@@ -46,7 +46,7 @@ export function TaskHead({
         </div>
       )}
       <div className="swatches" role="radiogroup" aria-label={tr('modal.color')}>
-        {Object.keys(COLORS).map((k) => (
+        {COLOR_IDS.map((k) => (
           <button
             key={k}
             type="button"

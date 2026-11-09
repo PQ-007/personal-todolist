@@ -126,7 +126,8 @@ export function ContextMenu({ menu, onClose }: { menu: MenuState; onClose: () =>
         }
         if (item.kind === 'swatches') {
           return (
-            <div key={i} className="ctxswatches" role="group" aria-label={item.label} style={{ '--n': item.options.length } as CSSProperties}>
+            // At most six to a row, so each keeps room for its selection ring.
+            <div key={i} className="ctxswatches" role="group" aria-label={item.label} style={{ '--n': Math.ceil(item.options.length / Math.ceil(item.options.length / 6)) } as CSSProperties}>
               {item.options.map((o) => (
                 <button
                   key={o.id}

@@ -81,6 +81,11 @@ export const mn: Messages = {
   'color.orange': 'Улбар шар',
   'color.red': 'Улаан',
   'color.gray': 'Саарал',
+  'color.yellow': 'Шар',
+  'color.lime': 'Цайвар ногоон',
+  'color.teal': 'Усан цэнхэр',
+  'color.lavender': 'Лаванда',
+  'color.pink': 'Ягаан',
 
   'md.toolbar': 'Формат',
   'md.checklist': 'Шалгах жагсаалт',

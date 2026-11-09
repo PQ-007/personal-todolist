@@ -80,6 +80,11 @@ export const en = {
   'color.orange': 'Orange',
   'color.red': 'Red',
   'color.gray': 'Gray',
+  'color.yellow': 'Yellow',
+  'color.lime': 'Lime',
+  'color.teal': 'Teal',
+  'color.lavender': 'Lavender',
+  'color.pink': 'Pink',
 
   'md.toolbar': 'Formatting',
   'md.checklist': 'Checklist',
