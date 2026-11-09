@@ -10,7 +10,7 @@ import { createOutbox, createTaskCache, queueChange, type Outbox, type Pending, 
 import { AuthError, ConflictError, OfflineError, type TaskStore } from '../data/store';
 import { fmtDate, t as tr } from '../i18n';
 import { matchesFilter, type LabelFilter } from '../domain/labels';
-import { shiftRule, splitRule } from '../domain/recurrence';
+import { previewOccurrences, shiftRule, splitRule } from '../domain/recurrence';
 import { itemFromTask, nextFreeSlot, taskFromItem, type StackItem } from '../domain/stack';
 import { clampSpan, sameRange, stepDay, visibleRange, type DayRange, type View } from '../domain/views';
 import {
@@ -67,6 +67,39 @@ export interface PlannerState {
 const sameLines = (a: readonly string[] | undefined, b: readonly string[]) => a === b || a?.join('\n') === b.join('\n');
 
 /**
+ * An edit to a repeating task beyond one occurrence, given the series as it is: its content and
+ * times as edited on the occurrence, and its rule (none: it stops repeating).
+ */
+export type SeriesEdit = (series: Task) => { next: NewTask; recurrence: string[] | undefined };
+
+/** A task that doesn't repeat and isn't an occurrence. */
+const plainTask = (t: NewTask): NewTask => ({ ...t, recurrence: undefined, seriesId: undefined, originalStart: undefined, occurrenceKeys: undefined });
+
+/** The series after `edit`, made on `occurrence`, applies to all of it (null: it stops repeating). See `updateSeries`. */
+function editSeries(series: Task, occurrence: Task, edit: SeriesEdit): { series: Task | null; next: NewTask } {
+  const { next, recurrence: rule } = edit(series);
+  let recurrence = rule;
+  const day = addDays(startOfDay(series.start), dayDiff(occurrence.start, next.start));
+  if (series.recurrence && sameLines(recurrence, series.recurrence)) recurrence = shiftRule(series.recurrence, occurrence.start, next.start);
+  if (!recurrence?.length) return { series: null, next };
+  const start = next.allDay ? day : withTime(day, next.start.getHours(), next.start.getMinutes());
+  const end = next.allDay ? addDays(day, Math.max(1, dayDiff(next.start, next.end))) : new Date(start.getTime() + (next.end.getTime() - next.start.getTime()));
+  const { title, description, colorId, label, tags, allDay, reminders } = next;
+  return { series: { ...series, title, description, colorId, label, tags, allDay, reminders, start, end, recurrence }, next };
+}
+
+/** "This and following" (see `updateFollowing`): the rule the series keeps, and the new series from `occurrence` on. */
+function splitSeries(series: Task, occurrence: Task, edit: SeriesEdit): { before: string[]; rest: NewTask } {
+  const { next, recurrence } = edit(series);
+  const at = occurrence.originalStart ?? occurrence.start;
+  const split = splitRule(series.recurrence ?? [], series.start, at, series.allDay);
+  // An unchanged rule continues where the old series stops (a COUNT counts what is left),
+  // moved to the day this occurrence moved to.
+  const rule = series.recurrence && sameLines(recurrence, series.recurrence) ? shiftRule(split.after, occurrence.start, next.start) : recurrence;
+  return { before: split.before, rest: { ...plainTask(next), done: false, recurrence: rule } };
+}
+
+/**
  * Holds what the UI shows and applies every change optimistically: the UI updates at once,
  * the store call runs in the background, and a failure rolls that task back with a toast.
  * Changes to one task are sent one after another, each diffed against the last state the
@@ -99,6 +132,14 @@ export class Planner {
   private offline = false;
   private flushing = false;
   private retryTimer: ReturnType<typeof setInterval> | undefined;
+  /** The latest load of the days on screen. */
+  private loading: Promise<void> = Promise.resolve();
+  /** Series as last fetched, or as a change being saved will leave them: what previews are made from. */
+  private seriesCache = new Map<string, Task>();
+  /** Series changes are saved one at a time, each after the reload that follows the one before. */
+  private seriesQueue: Promise<void> = Promise.resolve();
+  /** How each series change being saved changes the days on screen, kept on top of reloads until saved. */
+  private seriesViews = new Set<(tasks: Task[]) => Task[]>();
 
   constructor() {
     restoreToken();
@@ -179,11 +220,16 @@ export class Planner {
 
   /* ---------- loading ---------- */
 
-  async refresh() {
+  /** Loads the days on screen. Resolves once they are loaded, by this load or a newer one. */
+  refresh(): Promise<void> {
+    return (this.loading = this.load());
+  }
+
+  private async load(): Promise<void> {
     const seq = ++this.loadSeq;
     const google = this.state.settings.mode === 'google';
     if (google && !(await ensureToken())) {
-      if (seq !== this.loadSeq) return;
+      if (seq !== this.loadSeq) return this.loading;
       if (authUnreachable()) return this.showOffline();
       this.server.clear();
       this.set({ needAuth: true, tasks: [] });
@@ -193,14 +239,14 @@ export class Planner {
     const { from, days } = this.state.range;
     try {
       const tasks = await this.store.list(from, addDays(from, days));
-      if (seq !== this.loadSeq) return;
+      if (seq !== this.loadSeq) return this.loading;
       if (google) this.cache.put(from, days, tasks);
       this.server = new Map(tasks.map((t) => [t.id, t]));
       this.set({ tasks: this.withUnsent(tasks), sync: '' });
       if (this.offline) this.backOnline();
       if (this.outbox.length) void this.flush();
     } catch (e) {
-      if (seq !== this.loadSeq) return;
+      if (seq !== this.loadSeq) return this.loading;
       if (e instanceof OfflineError) this.showOffline();
       else this.fail(e);
     }
@@ -217,7 +263,7 @@ export class Planner {
     this.goOffline();
   }
 
-  /** `tasks` as loaded, with the outbox's changes applied on top. */
+  /** `tasks` as loaded, with the outbox's changes and the series changes still being saved applied on top. */
   private withUnsent(tasks: Task[]): Task[] {
     const { from, days } = this.state.range;
     const to = addDays(from, days);
@@ -227,6 +273,7 @@ export class Planner {
       out = out.filter((t) => !ids.includes(t.id));
       if (p.next && p.next.end > from && p.next.start < to) out = [...out, p.next];
     }
+    for (const view of this.seriesViews) out = view(out);
     return out;
   }
 
@@ -424,6 +471,7 @@ export class Planner {
     saveSettings(settings);
     this.set({ settings, tasks: [] });
     this.server.clear();
+    this.seriesCache.clear();
     this.store = this.makeStore();
     this.loadStack();
     this.loadOffline();
@@ -468,9 +516,20 @@ export class Planner {
   }
 
   create(input: NewTask): Promise<void> {
-    const { done } = this.startCreate(input);
-    // A new series shows as one task until its occurrences are loaded.
-    return input.recurrence?.length ? done.then(() => this.refresh()) : done;
+    const { id, done } = this.startCreate(input);
+    if (!input.recurrence?.length) return done;
+    // A new series shows its occurrences at once; the real ones replace them once it's saved.
+    const series = { ...input, id };
+    this.seriesCache.set(id, series);
+    return this.changeSeries(
+      (tasks) => this.seriesView(tasks, this.inSeries(id), series),
+      async () => {
+        await done;
+        // Known under its real id too, so changing it next shows at once.
+        const real = this.realId(id);
+        if (real !== id) this.seriesCache.set(real, { ...series, id: real });
+      },
+    );
   }
 
   /* ---------- repeating tasks ---------- */
@@ -479,117 +538,226 @@ export class Planner {
   async seriesOf(task: Task): Promise<Task | null> {
     if (task.recurrence?.length) return task;
     if (!task.seriesId) return null;
+    const id = this.realId(task.seriesId);
+    // A series still being created is only known here.
+    if (id.startsWith('tmp-')) return this.seriesCache.get(id) ?? null;
     try {
-      return await this.store.getSeries(task.seriesId);
+      return await this.fetchSeries(id);
     } catch (e) {
       this.fail(e);
       return null;
     }
   }
 
+  private async fetchSeries(id: string): Promise<Task> {
+    const series = await this.store.getSeries(this.realId(id));
+    this.seriesCache.set(series.id, series);
+    return series;
+  }
+
+  /** The series of `task` as known here (see `seriesCache`), else fetched. */
+  private async knownSeries(task: Task): Promise<Task | null> {
+    if (task.recurrence?.length) return task;
+    const cached = task.seriesId && this.seriesCache.get(this.realId(task.seriesId));
+    return cached || this.seriesOf(task);
+  }
+
+  /** Whether a task is series `id` or one of its occurrences. */
+  private inSeries(id: string) {
+    const sid = this.realId(id);
+    return (t: Task) => this.realId(t.id) === sid || (!!t.seriesId && this.realId(t.seriesId) === sid);
+  }
+
+  /** `tasks` with the ones `replaced` swapped for `series` (its occurrences on screen, or itself when it doesn't repeat). */
+  private seriesView(tasks: Task[], replaced: (t: Task) => boolean, series: Task | null, shiftDays = 0): Task[] {
+    const rest = tasks.filter((t) => !replaced(t) && t.id !== series?.id);
+    if (!series) return rest;
+    if (!series.recurrence?.length) return [...rest, series];
+    const { from, days } = this.state.range;
+    return [...rest, ...previewOccurrences(series, tasks.filter(replaced), from, addDays(from, days), shiftDays)];
+  }
+
+  /**
+   * Saves a change to a series without waiting for it: `view` shows the days on screen as the
+   * change will leave them, at once and on top of every reload until it's saved. Then `write`
+   * runs (after earlier series changes) and the days are reloaded. Edits to tasks that only the
+   * preview has wait for that, and then go to the occurrence the calendar made in their place.
+   */
+  private changeSeries(view: (tasks: Task[]) => Task[], write: () => Promise<void>): Promise<void> {
+    const before = new Set(this.state.tasks);
+    this.seriesViews.add(view);
+    this.set({ tasks: view(this.state.tasks), sync: 'saving' });
+    const previews = this.state.tasks.filter((t) => !before.has(t));
+    const job = this.seriesQueue.then(async () => {
+      try {
+        await write();
+        this.set({ sync: 'saved' });
+      } catch (e) {
+        // Previews may have been built on what failed.
+        this.seriesCache.clear();
+        this.fail(e);
+      }
+      this.seriesViews.delete(view);
+      await this.refresh();
+      this.adopt(previews);
+    });
+    this.seriesQueue = job;
+    for (const t of previews) {
+      // After the change, and after anything already queued for the same id.
+      const gate = Promise.all([this.chains.get(t.id)?.catch(() => {}), job]);
+      this.chains.set(t.id, gate);
+      void gate.then(() => this.chains.get(t.id) === gate && this.chains.delete(t.id));
+    }
+    return job;
+  }
+
+  /** Points each preview at the occurrence the calendar made in its place (same series, first due at the same time). */
+  private adopt(previews: Task[]) {
+    const loaded = [...this.server.values()];
+    for (const p of previews) {
+      if (this.server.has(this.realId(p.id)) || !p.seriesId || !p.originalStart) continue;
+      const sid = this.realId(p.seriesId);
+      const at = p.originalStart.getTime();
+      const real = loaded.find((t) => t.seriesId === sid && t.originalStart?.getTime() === at);
+      if (real) this.alias.set(p.id, real.id);
+    }
+  }
+
+  private newTmpId = () => `tmp-${Date.now().toString(36)}-${++this.tmpSeq}`;
+
+  /** Makes a single task repeat (`next` carries the rule), showing its occurrences at once. */
+  startRepeating(next: Task): Promise<void> {
+    const id = this.realId(next.id);
+    const done = this.update(next);
+    const series = { ...next, id };
+    this.seriesCache.set(id, series);
+    return this.changeSeries(
+      (tasks) => this.seriesView(tasks, this.inSeries(id), series),
+      () => done,
+    );
+  }
+
   /**
    * Applies an edit to every occurrence: the series takes the edited fields, time of day and
    * length, and moves by as many days as this occurrence did (an unchanged rule moves with it,
    * see `shiftRule`). Without a rule the series stops repeating and this occurrence becomes a
-   * plain task. Reloads afterwards, since every occurrence may change.
+   * plain task. Shown at once; reloaded once saved, since every occurrence may change.
    */
-  async updateSeries(occurrence: Task, next: NewTask, recurrence: string[] | undefined) {
-    const series = await this.seriesOf(occurrence);
-    if (!series) return;
-    const day = addDays(startOfDay(series.start), dayDiff(occurrence.start, next.start));
-    if (series.recurrence && sameLines(recurrence, series.recurrence)) recurrence = shiftRule(series.recurrence, occurrence.start, next.start);
-    const start = next.allDay ? day : withTime(day, next.start.getHours(), next.start.getMinutes());
-    const end = next.allDay ? addDays(day, Math.max(1, dayDiff(next.start, next.end))) : new Date(start.getTime() + (next.end.getTime() - next.start.getTime()));
-    const { title, description, colorId, label, tags, allDay, reminders } = next;
-    this.set({ sync: 'saving' });
-    try {
-      if (recurrence?.length) {
-        await this.store.update(series, { ...series, title, description, colorId, label, tags, allDay, reminders, start, end, recurrence });
-      } else {
-        await this.store.remove(series.id);
-        await this.store.create({ ...next, recurrence: undefined, seriesId: undefined, originalStart: undefined });
-      }
-      this.set({ sync: 'saved' });
-    } catch (e) {
-      this.fail(e);
-    }
-    await this.refresh();
+  async updateSeries(occurrence: Task, edit: SeriesEdit): Promise<void> {
+    const known = await this.knownSeries(occurrence);
+    if (!known) return;
+    const { series, next } = editSeries(known, occurrence, edit);
+    const plain = series ? null : { ...plainTask(next), id: this.newTmpId() };
+    if (series) this.seriesCache.set(series.id, series);
+    const shift = dayDiff(occurrence.start, next.start);
+    return this.changeSeries(
+      (tasks) => this.seriesView(tasks, this.inSeries(known.id), series ?? plain, shift),
+      async () => {
+        const cur = await this.fetchSeries(known.id);
+        const { series: saved, next: fields } = editSeries(cur, occurrence, edit);
+        if (saved) {
+          this.seriesCache.set(cur.id, await this.store.update(cur, saved));
+          return;
+        }
+        await this.store.remove(cur.id);
+        this.seriesCache.delete(cur.id);
+        const real = await this.store.create(plainTask(fields));
+        this.server.set(real.id, real);
+        if (plain) this.alias.set(plain.id, real.id);
+      },
+    );
   }
 
   /**
    * "This and following": the series stops the day before this occurrence, and a new series
-   * starts here with the edit (and `recurrence`; none makes it a single task). For the first
-   * occurrence that is the same as editing all of them.
+   * starts here with the edit (and its rule; none makes it a single task). For the first
+   * occurrence that is the same as editing all of them. Shown at once.
    */
-  async updateFollowing(occurrence: Task, next: NewTask, recurrence: string[] | undefined) {
-    const series = await this.seriesOf(occurrence);
-    if (!series?.recurrence) return;
+  async updateFollowing(occurrence: Task, edit: SeriesEdit): Promise<void> {
+    const known = await this.knownSeries(occurrence);
+    if (!known?.recurrence) return;
     const at = occurrence.originalStart ?? occurrence.start;
-    if (at <= series.start) return this.updateSeries(occurrence, next, recurrence);
-    const split = splitRule(series.recurrence, series.start, at, series.allDay);
-    // An unchanged rule continues where the old series stops (a COUNT counts what is left),
-    // moved to the day this occurrence moved to.
-    const rest = sameLines(recurrence, series.recurrence) ? shiftRule(split.after, occurrence.start, next.start) : recurrence;
-    this.set({ sync: 'saving' });
-    try {
-      await this.store.update(series, { ...series, recurrence: split.before });
-      await this.store.create({ ...next, done: false, recurrence: rest, seriesId: undefined, originalStart: undefined, occurrenceKeys: undefined });
-      this.set({ sync: 'saved' });
-    } catch (e) {
-      this.fail(e);
-    }
-    await this.refresh();
+    if (at <= known.start) return this.updateSeries(occurrence, edit);
+    const { before, rest } = splitSeries(known, occurrence, edit);
+    const created = { ...rest, id: this.newTmpId() };
+    this.seriesCache.set(known.id, { ...known, recurrence: before });
+    this.seriesCache.set(created.id, created);
+    const later = (t: Task) => this.inSeries(known.id)(t) && (t.originalStart ?? t.start) >= at;
+    return this.changeSeries(
+      (tasks) => this.seriesView(tasks, later, created, dayDiff(occurrence.start, rest.start)),
+      async () => {
+        const cur = await this.fetchSeries(known.id);
+        if (!cur.recurrence) return;
+        const split = splitSeries(cur, occurrence, edit);
+        this.seriesCache.set(cur.id, await this.store.update(cur, { ...cur, recurrence: split.before }));
+        const real = await this.store.create(split.rest);
+        this.alias.set(created.id, real.id);
+        this.seriesCache.delete(created.id);
+        if (real.recurrence?.length) this.seriesCache.set(real.id, real);
+        else this.server.set(real.id, real);
+      },
+    );
   }
 
-  /** Deletes this occurrence and the ones after it; undo restores the series' old end. */
-  async deleteFollowing(occurrence: Task) {
-    const series = await this.seriesOf(occurrence);
-    if (!series?.recurrence) return;
+  /** Deletes this occurrence and the ones after it, at once; undo restores the series' old end. */
+  deleteFollowing(occurrence: Task): Promise<void> {
+    const sid = occurrence.seriesId ?? occurrence.id;
     const at = occurrence.originalStart ?? occurrence.start;
-    if (at <= series.start) return this.deleteSeries(occurrence);
-    const { before } = splitRule(series.recurrence, series.start, at, series.allDay);
-    const restore = async () => {
-      try {
-        const cur = await this.store.getSeries(series.id);
-        await this.store.update(cur, { ...cur, recurrence: series.recurrence });
-      } catch (e) {
-        this.fail(e);
-      }
-      await this.refresh();
-    };
-    this.set({ tasks: this.state.tasks.filter((t) => !(t.seriesId === series.id && (t.originalStart ?? t.start) >= at)), sync: 'saving' });
-    try {
-      await this.store.update(series, { ...series, recurrence: before });
-      this.set({ sync: 'saved' });
-    } catch (e) {
-      this.fail(e);
-      return void this.refresh();
-    }
-    void this.refresh();
-    this.toast(tr('rep.deletedFollowing', { title: series.title }), { label: tr('toast.undo'), run: () => void restore() });
+    let undo: (() => void) | null = null;
+    const job = this.changeSeries(
+      (tasks) => tasks.filter((t) => !(this.inSeries(sid)(t) && (t.originalStart ?? t.start) >= at)),
+      async () => {
+        const series = await this.fetchSeries(sid);
+        if (!series.recurrence) return;
+        if (at <= series.start) {
+          await this.store.remove(series.id);
+          this.seriesCache.delete(series.id);
+          undo = () => void this.create({ ...copyOf(series), recurrence: series.recurrence, extraProps: series.extraProps });
+          return;
+        }
+        const { before } = splitRule(series.recurrence, series.start, at, series.allDay);
+        this.seriesCache.set(series.id, await this.store.update(series, { ...series, recurrence: before }));
+        undo = () =>
+          void this.changeSeries(
+            (tasks) => this.seriesView(tasks, this.inSeries(series.id), series),
+            async () => {
+              const cur = await this.fetchSeries(series.id);
+              this.seriesCache.set(cur.id, await this.store.update(cur, { ...cur, recurrence: series.recurrence }));
+            },
+          );
+      },
+    );
+    this.toast(tr('rep.deletedFollowing', { title: occurrence.title }), { label: tr('toast.undo'), run: () => void job.then(() => undo?.()) });
+    return job;
   }
 
-  /** Deletes every occurrence of the task's series. Undo brings the series back. */
-  async deleteSeries(occurrence: Task) {
-    const series = await this.seriesOf(occurrence);
-    if (!series) return;
-    this.set({ tasks: this.state.tasks.filter((t) => t.seriesId !== series.id && t.id !== series.id), sync: 'saving' });
-    try {
-      await this.store.remove(series.id);
-      this.set({ sync: 'saved' });
-    } catch (e) {
-      this.fail(e);
-      return void this.refresh();
-    }
-    this.toast(tr('rep.deletedAll', { title: series.title }), {
+  /** Deletes every occurrence of the task's series, at once. Undo brings the series back. */
+  deleteSeries(occurrence: Task): Promise<void> {
+    const sid = occurrence.seriesId ?? occurrence.id;
+    let removed: Task | null = null;
+    const job = this.changeSeries(
+      (tasks) => tasks.filter((t) => !this.inSeries(sid)(t)),
+      async () => {
+        const series = await this.fetchSeries(sid);
+        await this.store.remove(series.id);
+        this.seriesCache.delete(series.id);
+        removed = series;
+      },
+    );
+    this.toast(tr('rep.deletedAll', { title: occurrence.title }), {
       label: tr('toast.undo'),
-      run: () => void this.create({ ...copyOf(series), recurrence: series.recurrence, extraProps: series.extraProps }),
+      run: () =>
+        void job.then(() => {
+          const s = removed as Task | null;
+          if (s) void this.create({ ...copyOf(s), recurrence: s.recurrence, extraProps: s.extraProps });
+        }),
     });
+    return job;
   }
 
   /** Shows the task at once under a temporary id and saves it in the background. */
   private startCreate(input: NewTask): { id: string; done: Promise<void> } {
-    const tmpId = `tmp-${Date.now().toString(36)}-${++this.tmpSeq}`;
+    const tmpId = this.newTmpId();
     this.set({ tasks: [...this.state.tasks, { ...input, id: tmpId }] });
     return { id: tmpId, done: this.finishCreate(tmpId, input) };
   }

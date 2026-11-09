@@ -181,13 +181,13 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
       if (!scope) return;
       onClose();
       if (scope === 'this') void planner.update({ ...cur, ...fields });
-      else if (scope === 'following') void planner.updateFollowing(cur, fields, recurrence);
-      else void planner.updateSeries(cur, fields, recurrence);
+      else if (scope === 'following') void planner.updateFollowing(cur, () => ({ next: fields, recurrence }));
+      else void planner.updateSeries(cur, () => ({ next: fields, recurrence }));
       return;
     }
     onClose();
-    // A task that starts repeating becomes a series; reload to show its occurrences.
-    if (recurrence) void planner.update({ ...cur, ...fields, recurrence }).then(() => planner.refresh());
+    // A task that starts repeating becomes a series.
+    if (recurrence) void planner.startRepeating({ ...cur, ...fields, recurrence });
     else void planner.update({ ...cur, ...fields });
   };
 

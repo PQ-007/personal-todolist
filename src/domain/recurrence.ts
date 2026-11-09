@@ -1,4 +1,5 @@
-import { addDays, dayDiff, pad, startOfDay } from './dates';
+import { addDays, dayDiff, pad, startOfDay, ymd } from './dates';
+import type { Task } from './types';
 
 /**
  * Repeating tasks, stored the way Google Calendar stores them: an RRULE line on the first
@@ -247,4 +248,41 @@ export function occurrences(r: Repeat, start: Date, durationMs: number, from: Da
     }
   }
   return out;
+}
+
+/** An occurrence id as Google makes them: the series id and when it was first due (UTC, or the date if all-day). */
+export function occurrenceId(seriesId: string, at: Date, allDay: boolean): string {
+  const when = allDay ? ymd(at).replace(/-/g, '') : at.toISOString().replace(/[-:]|\.\d+/g, '');
+  return `${seriesId}_${when}`;
+}
+
+/**
+ * What the calendar should show for `series` in [from, to), worked out here so a change shows
+ * before the calendar has saved it: its occurrences, each keeping the done state of the one in
+ * `shown` first due on the same day. A rule this app can't expand moves `shown` along with the
+ * series instead (by `shiftDays`, to the series' time of day and length).
+ */
+export function previewOccurrences(series: Task, shown: Task[], from: Date, to: Date, shiftDays = 0): Task[] {
+  const { recurrence, etag: _, occurrenceKeys: __, ...fields } = series;
+  const r = parseRule(recurrence);
+  if (!r) return [];
+  const len = series.end.getTime() - series.start.getTime();
+  const make = (at: Date, start: Date, done: boolean): Task => ({
+    ...fields,
+    id: occurrenceId(series.id, at, series.allDay),
+    seriesId: series.id,
+    originalStart: at,
+    start,
+    end: new Date(start.getTime() + len),
+    done,
+  });
+  if (r.unsupported) {
+    return shown.map((t) => {
+      const day = addDays(startOfDay(t.start), shiftDays);
+      const start = series.allDay ? day : new Date(day.getFullYear(), day.getMonth(), day.getDate(), series.start.getHours(), series.start.getMinutes());
+      return make(t.originalStart ?? t.start, start, t.done);
+    });
+  }
+  const doneOn = new Set(shown.filter((t) => t.done).map((t) => ymd(t.originalStart ?? t.start)));
+  return occurrences(r, series.start, len, from, to).map((at) => make(at, at, doneOn.has(ymd(at))));
 }

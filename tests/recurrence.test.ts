@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { hm, ymd } from '../src/domain/dates';
-import { nthOf, occurrences, parseRule, presetOf, presets, ruleLine, sameRepeat, shiftRule, splitRule, type Repeat, withEnd } from '../src/domain/recurrence';
+import type { Task } from '../src/domain/types';
+import {
+  nthOf,
+  occurrenceId,
+  occurrences,
+  parseRule,
+  presetOf,
+  presets,
+  previewOccurrences,
+  ruleLine,
+  sameRepeat,
+  shiftRule,
+  splitRule,
+  type Repeat,
+  withEnd,
+} from '../src/domain/recurrence';
 
 const thu = new Date(2026, 9, 22, 9, 0); // Thursday, Oct 22 2026, 09:00
 const hour = 3600_000;
@@ -117,6 +132,50 @@ describe('splitting a series ("this and following")', () => {
     expect(parseRule(after)!.count).toBe(3);
     expect(parseRule(before)!.count).toBeUndefined();
     expect(withEnd(['RRULE:FREQ=DAILY;COUNT=10'], {}, false)).toEqual(['RRULE:FREQ=DAILY']);
+  });
+});
+
+describe('previewing a series before it is saved', () => {
+  const series: Task = {
+    id: 'abc',
+    title: 'Gym',
+    description: '',
+    start: new Date(2026, 9, 5, 9, 0), // Mon 5 Oct
+    end: new Date(2026, 9, 5, 10, 0),
+    allDay: false,
+    colorId: '',
+    done: false,
+    recurrence: ['RRULE:FREQ=WEEKLY;BYDAY=MO,WE'],
+    etag: 'e1',
+  };
+  const from = new Date(2026, 9, 12);
+  const to = new Date(2026, 9, 19);
+
+  it('shows the occurrences on screen, with ids like the calendar makes', () => {
+    const shown = previewOccurrences(series, [], from, to);
+    expect(shown.map((t) => `${ymd(t.start)} ${hm(t.start)}-${hm(t.end)}`)).toEqual(['2026-10-12 09:00-10:00', '2026-10-14 09:00-10:00']);
+    expect(shown[0]).toMatchObject({ seriesId: 'abc', title: 'Gym', id: occurrenceId('abc', shown[0]!.start, false) });
+    expect(shown[0]!.recurrence).toBeUndefined();
+    expect(shown[0]!.etag).toBeUndefined();
+    expect(occurrenceId('abc', new Date(2026, 9, 12), true)).toBe('abc_20261012');
+  });
+
+  it('keeps the done state of the occurrence due that day', () => {
+    const old = previewOccurrences(series, [], from, to).map((t, i) => ({ ...t, done: i === 1 }));
+    const moved = { ...series, start: new Date(2026, 9, 5, 18, 0), end: new Date(2026, 9, 5, 19, 0) };
+    expect(previewOccurrences(moved, old, from, to).map((t) => [hm(t.start), t.done])).toEqual([
+      ['18:00', false],
+      ['18:00', true],
+    ]);
+  });
+
+  it('moves what is shown for a rule it cannot expand', () => {
+    const odd = { ...series, recurrence: ['RRULE:FREQ=WEEKLY;BYSETPOS=1'], start: new Date(2026, 9, 6, 7, 30), end: new Date(2026, 9, 6, 8, 0) };
+    const old = previewOccurrences(series, [], from, to);
+    expect(previewOccurrences(odd, old, from, to, 1).map((t) => `${ymd(t.start)} ${hm(t.start)}-${hm(t.end)}`)).toEqual([
+      '2026-10-13 07:30-08:00',
+      '2026-10-15 07:30-08:00',
+    ]);
   });
 });
 

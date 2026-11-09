@@ -1,7 +1,7 @@
 import { copyOf } from '../domain/clipboard';
 import type { Task } from '../domain/types';
 import { t } from '../i18n';
-import { planner } from '../state/planner';
+import { planner, type SeriesEdit } from '../state/planner';
 import { chooseDialog } from './confirm';
 
 export const repeats = (task: Task) => !!(task.seriesId || task.recurrence?.length);
@@ -34,14 +34,17 @@ export function askScope(kind: 'edit' | 'delete', allowThis = true): Promise<Sco
  */
 export async function saveMoved(task: Task, next: Task) {
   if (!repeats(task)) return planner.update(next);
+  // Fetched while the question is open, so the answer shows at once.
+  void planner.seriesOf(task);
   const scope = await askScope('edit');
   if (scope === 'this') return planner.update(next);
   if (!scope) return;
-  const series = await planner.seriesOf(task);
-  if (!series?.recurrence) return;
-  const fields = { ...copyOf(series), start: next.start, end: next.end, allDay: next.allDay };
-  if (scope === 'following') await planner.updateFollowing(task, fields, series.recurrence);
-  else await planner.updateSeries(task, fields, series.recurrence);
+  const move: SeriesEdit = (series) => ({
+    next: { ...copyOf(series), start: next.start, end: next.end, allDay: next.allDay },
+    recurrence: series.recurrence,
+  });
+  if (scope === 'following') await planner.updateFollowing(task, move);
+  else await planner.updateSeries(task, move);
 }
 
 /** Deletes a task; for a repeating one, after asking whether to delete this one or all of them. */
