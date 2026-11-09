@@ -250,6 +250,7 @@ export const en = {
   'rep.scopeHint': 'Changing how it repeats applies to this and following tasks, or all of them.',
   'rep.deletedAll': 'Deleted every “{title}”',
   'rep.deletedFollowing': 'Deleted “{title}” from this day on',
+  'rep.offline': 'Changing more than one occurrence of a repeating task needs a connection. Nothing was changed.',
   'toast.dismiss': 'Dismiss',
   'update.available': 'A new version is available.',
   'update.reload': 'Reload',

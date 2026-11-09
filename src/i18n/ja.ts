@@ -251,6 +251,7 @@ export const ja: Messages = {
   'rep.scopeHint': '繰り返しの設定の変更は、これ以降またはすべての予定に反映されます。',
   'rep.deletedAll': '「{title}」をすべて削除しました',
   'rep.deletedFollowing': '「{title}」をこの日以降削除しました',
+  'rep.offline': '繰り返しタスクの複数の予定を変更するには接続が必要です。変更されていません。',
   'toast.dismiss': '閉じる',
   'update.available': '新しいバージョンがあります。',
   'update.reload': '再読み込み',

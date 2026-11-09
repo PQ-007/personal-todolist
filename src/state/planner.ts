@@ -140,6 +140,15 @@ export class Planner {
   private seriesQueue: Promise<void> = Promise.resolve();
   /** How each series change being saved changes the days on screen, kept on top of reloads until saved. */
   private seriesViews = new Set<(tasks: Task[]) => Task[]>();
+  /**
+   * What each task with a change still being sent should look like (null: deleted), by queue
+   * key, kept on top of reloads so one that overlaps the change doesn't undo it on screen.
+   */
+  private inflight = new Map<string, { task: Task | null; token: number; savedAt?: number }>();
+  /** The range the tasks on screen were loaded for (null: none yet). */
+  private shownRange: DayRange | null = null;
+  /** Tasks known only from the offline copy: changes to them wait for a fresh load first. */
+  private stale = new Set<string>();
 
   constructor() {
     restoreToken();
@@ -165,6 +174,7 @@ export class Planner {
     this.store = this.makeStore();
     this.loadOffline();
     globalThis.addEventListener?.('online', () => void this.reconnect());
+    globalThis.document?.addEventListener('visibilitychange', () => this.onVisibility());
     this.loadStack();
     // Back from a sign-in that Google or the auth function turned down.
     const authError = new URLSearchParams(location.search).get('auth');
@@ -228,10 +238,13 @@ export class Planner {
   private async load(): Promise<void> {
     const seq = ++this.loadSeq;
     const google = this.state.settings.mode === 'google';
+    // New days show at once as last loaded, until Google answers.
+    if (google && !(this.shownRange && sameRange(this.shownRange, this.state.range))) this.showCached();
     if (google && !(await ensureToken())) {
       if (seq !== this.loadSeq) return this.loading;
       if (authUnreachable()) return this.showOffline();
       this.server.clear();
+      this.shownRange = null;
       this.set({ needAuth: true, tasks: [] });
       return;
     }
@@ -242,6 +255,10 @@ export class Planner {
       if (seq !== this.loadSeq) return this.loading;
       if (google) this.cache.put(from, days, tasks);
       this.server = new Map(tasks.map((t) => [t.id, t]));
+      // Saved before this load started: it has them now.
+      for (const [key, c] of this.inflight) if (c.savedAt !== undefined && c.savedAt < seq) this.inflight.delete(key);
+      this.stale.clear();
+      this.shownRange = { from, days };
       this.set({ tasks: this.withUnsent(tasks), sync: '' });
       if (this.offline) this.backOnline();
       if (this.outbox.length) void this.flush();
@@ -263,18 +280,87 @@ export class Planner {
     this.goOffline();
   }
 
-  /** `tasks` as loaded, with the outbox's changes and the series changes still being saved applied on top. */
+  /**
+   * Shows the days on screen from the offline copy while they load. Tasks it adds count as
+   * known to the server, but changes to them wait for the fresh load (see `fresh`).
+   */
+  private showCached() {
+    const { from, days } = this.state.range;
+    const cached = this.cache.get(from, days);
+    if (!cached) return;
+    for (const t of cached) {
+      if (this.server.has(t.id)) continue;
+      this.server.set(t.id, t);
+      this.stale.add(t.id);
+    }
+    this.shownRange = { from, days };
+    this.set({ tasks: this.withUnsent(cached) });
+  }
+
+  /**
+   * Updates the offline copy of the days on screen with the changes saved since they were
+   * loaded, so they show as they are when shown from it again (see `showCached`).
+   */
+  private saveShown() {
+    const r = this.shownRange;
+    if (!r || this.state.settings.mode !== 'google' || !sameRange(r, this.state.range)) return;
+    const to = addDays(r.from, r.days);
+    // What Google has confirmed: changes still being sent are shown on top anyway.
+    const tasks = [...this.server.values()].filter((t) => !t.recurrence?.length && t.end > r.from && t.start < to);
+    this.cache.put(r.from, r.days, tasks);
+  }
+
+  /** Leaving the tab keeps the offline copy current; coming back shows changes made elsewhere meanwhile. */
+  private onVisibility() {
+    if (document.visibilityState === 'hidden') return this.saveShown();
+    if (!this.state.needAuth) void this.refresh();
+  }
+
+  /** Waits for the fresh load when `id` is only known from the offline copy (its version may be old). */
+  private async fresh(id: string) {
+    if (this.stale.has(id)) await this.loading;
+  }
+
+  /**
+   * `tasks` as loaded, with what's still being saved applied on top: the outbox, changes being
+   * sent, and series changes.
+   */
   private withUnsent(tasks: Task[]): Task[] {
     const { from, days } = this.state.range;
     const to = addDays(from, days);
+    const shows = (t: Task) => t.end > from && t.start < to;
     let out = tasks;
     for (const p of this.outbox) {
       const ids = [p.key, p.base?.id, p.next?.id];
       out = out.filter((t) => !ids.includes(t.id));
-      if (p.next && p.next.end > from && p.next.start < to) out = [...out, p.next];
+      if (p.next && shows(p.next)) out = [...out, p.next];
+    }
+    for (const [key, { task }] of this.inflight) {
+      const id = this.realId(key);
+      const next = task && shows(task) ? { ...task, id } : null;
+      const at = out.findIndex((t) => t.id === id || t.id === key);
+      const rest = out.filter((t) => t.id !== id && t.id !== key);
+      if (next) rest.splice(at < 0 ? rest.length : at, 0, next);
+      out = rest;
     }
     for (const view of this.seriesViews) out = view(out);
     return out;
+  }
+
+  /**
+   * Records what task `key` should show while its change is sent. The returned function ends
+   * that (unless a newer change to the same task replaced it meanwhile): at once when not sent
+   * (failed, or kept in the outbox), else with `sent`, what was saved, kept until a load that
+   * started after the save, since one started before may not have it.
+   */
+  private expect(key: string, task: Task | null): (sent?: { task: Task | null }) => void {
+    const token = ++this.tmpSeq;
+    this.inflight.set(key, { task, token });
+    return (sent) => {
+      if (this.inflight.get(key)?.token !== token) return;
+      if (sent) this.inflight.set(key, { task: sent.task, token, savedAt: this.loadSeq });
+      else this.inflight.delete(key);
+    };
   }
 
   private goOffline() {
@@ -331,10 +417,13 @@ export class Planner {
         // Out of the outbox while it's sent: edits made meanwhile are queued after it as usual.
         this.outbox = this.outbox.slice(1);
         this.outboxStore.save(this.outbox);
+        const settle = this.expect(p.key, p.next);
         try {
           await this.enqueue(p.key, () => this.sendPending(p));
           sent++;
+          settle({ task: p.next && (this.server.get(this.realId(p.key)) ?? p.next) });
         } catch (e) {
+          settle();
           if (e instanceof OfflineError) {
             this.outbox = queueChange([p, ...this.outbox.filter((q) => q.key !== p.key)], this.outbox.find((q) => q.key === p.key) ?? p);
             this.outboxStore.save(this.outbox);
@@ -377,6 +466,7 @@ export class Planner {
     next.span = clampSpan(next.span);
     const range = visibleRange(next);
     const moved = !sameRange(range, this.state.range);
+    if (moved) this.saveShown();
     if (patch.view || patch.span) saveView({ view: next.view, span: next.span });
     this.set({ ...next, range });
     if (moved) void this.refresh();
@@ -463,15 +553,23 @@ export class Planner {
 
   async disconnect() {
     await signOut();
-    this.server.clear();
+    this.forget();
     this.set({ needAuth: true, tasks: [] });
+  }
+
+  /** Drops what's known about the calendar's tasks (another calendar, or signed out). */
+  private forget() {
+    this.server.clear();
+    this.seriesCache.clear();
+    this.inflight.clear();
+    this.stale.clear();
+    this.shownRange = null;
   }
 
   async applySettings(settings: Settings) {
     saveSettings(settings);
     this.set({ settings, tasks: [] });
-    this.server.clear();
-    this.seriesCache.clear();
+    this.forget();
     this.store = this.makeStore();
     this.loadStack();
     this.loadOffline();
@@ -534,13 +632,23 @@ export class Planner {
 
   /* ---------- repeating tasks ---------- */
 
-  /** The series a task belongs to: itself when it is one, its series for an occurrence, else null. */
+  /**
+   * The series a task belongs to: itself when it is one, its series for an occurrence, else
+   * null. Answers at once when the series is known here (see `seriesCache`), fetching it again
+   * in the background; saving always fetches it fresh, so this is only for showing and previews.
+   */
   async seriesOf(task: Task): Promise<Task | null> {
     if (task.recurrence?.length) return task;
     if (!task.seriesId) return null;
     const id = this.realId(task.seriesId);
+    const cached = this.seriesCache.get(id);
     // A series still being created is only known here.
-    if (id.startsWith('tmp-')) return this.seriesCache.get(id) ?? null;
+    if (id.startsWith('tmp-')) return cached ?? null;
+    if (cached) {
+      // Not while a change is being saved: the server still has the series as it was.
+      if (!this.seriesViews.size) void this.fetchSeries(id).catch(() => {});
+      return cached;
+    }
     try {
       return await this.fetchSeries(id);
     } catch (e) {
@@ -553,13 +661,6 @@ export class Planner {
     const series = await this.store.getSeries(this.realId(id));
     this.seriesCache.set(series.id, series);
     return series;
-  }
-
-  /** The series of `task` as known here (see `seriesCache`), else fetched. */
-  private async knownSeries(task: Task): Promise<Task | null> {
-    if (task.recurrence?.length) return task;
-    const cached = task.seriesId && this.seriesCache.get(this.realId(task.seriesId));
-    return cached || this.seriesOf(task);
   }
 
   /** Whether a task is series `id` or one of its occurrences. */
@@ -586,18 +687,27 @@ export class Planner {
   private changeSeries(view: (tasks: Task[]) => Task[], write: () => Promise<void>): Promise<void> {
     const before = new Set(this.state.tasks);
     this.seriesViews.add(view);
+    this.pending++;
     this.set({ tasks: view(this.state.tasks), sync: 'saving' });
     const previews = this.state.tasks.filter((t) => !before.has(t));
     const job = this.seriesQueue.then(async () => {
+      let failed = false;
       try {
         await write();
-        this.set({ sync: 'saved' });
+        // Saved once nothing else is still being sent either.
+        if (--this.pending === 0) this.set({ sync: 'saved' });
       } catch (e) {
+        this.pending--;
+        failed = true;
         // Previews may have been built on what failed.
         this.seriesCache.clear();
         this.fail(e);
+        // Series changes aren't kept for later (see `offlineSeries`): it didn't happen.
+        if (e instanceof OfflineError) this.toast(tr('rep.offline'));
       }
       this.seriesViews.delete(view);
+      // Back to what's known at once, whether or not the reload below can reach Google.
+      if (failed) this.set({ tasks: this.withUnsent([...this.server.values()].filter((t) => !t.recurrence?.length)) });
       await this.refresh();
       this.adopt(previews);
     });
@@ -625,6 +735,16 @@ export class Planner {
 
   private newTmpId = () => `tmp-${Date.now().toString(36)}-${++this.tmpSeq}`;
 
+  /**
+   * Changing or deleting more than one occurrence needs Google (it isn't kept for later like
+   * other changes): true, with a toast, when it can't be reached.
+   */
+  private offlineSeries(): boolean {
+    if (!this.offline) return false;
+    this.toast(tr('rep.offline'));
+    return true;
+  }
+
   /** Makes a single task repeat (`next` carries the rule), showing its occurrences at once. */
   startRepeating(next: Task): Promise<void> {
     const id = this.realId(next.id);
@@ -644,14 +764,24 @@ export class Planner {
    * plain task. Shown at once; reloaded once saved, since every occurrence may change.
    */
   async updateSeries(occurrence: Task, edit: SeriesEdit): Promise<void> {
-    const known = await this.knownSeries(occurrence);
+    if (this.offlineSeries()) return;
+    const known = await this.seriesOf(occurrence);
     if (!known) return;
     const { series, next } = editSeries(known, occurrence, edit);
     const plain = series ? null : { ...plainTask(next), id: this.newTmpId() };
     if (series) this.seriesCache.set(series.id, series);
     const shift = dayDiff(occurrence.start, next.start);
+    const ofSeries = this.inSeries(known.id);
+    // Only what it says changed: the occurrences on screen take it as they are, so ones moved
+    // or deleted on their own stay that way (a rebuild from the rule would undo that until reloaded).
+    const contentOnly =
+      !!series && !!known.recurrence && sameLines(series.recurrence, known.recurrence) && series.allDay === known.allDay &&
+      series.start.getTime() === known.start.getTime() && series.end.getTime() === known.end.getTime();
+    const content = series && { title: series.title, description: series.description, colorId: series.colorId, label: series.label, tags: series.tags, reminders: series.reminders };
     return this.changeSeries(
-      (tasks) => this.seriesView(tasks, this.inSeries(known.id), series ?? plain, shift),
+      contentOnly
+        ? (tasks) => tasks.map((t) => (t.seriesId && ofSeries(t) ? { ...t, ...content } : t))
+        : (tasks) => this.seriesView(tasks, ofSeries, series ?? plain, shift),
       async () => {
         const cur = await this.fetchSeries(known.id);
         const { series: saved, next: fields } = editSeries(cur, occurrence, edit);
@@ -674,7 +804,8 @@ export class Planner {
    * occurrence that is the same as editing all of them. Shown at once.
    */
   async updateFollowing(occurrence: Task, edit: SeriesEdit): Promise<void> {
-    const known = await this.knownSeries(occurrence);
+    if (this.offlineSeries()) return;
+    const known = await this.seriesOf(occurrence);
     if (!known?.recurrence) return;
     const at = occurrence.originalStart ?? occurrence.start;
     if (at <= known.start) return this.updateSeries(occurrence, edit);
@@ -701,39 +832,43 @@ export class Planner {
 
   /** Deletes this occurrence and the ones after it, at once; undo restores the series' old end. */
   deleteFollowing(occurrence: Task): Promise<void> {
+    if (this.offlineSeries()) return Promise.resolve();
     const sid = occurrence.seriesId ?? occurrence.id;
     const at = occurrence.originalStart ?? occurrence.start;
-    let undo: (() => void) | null = null;
+    const later = (t: Task) => this.inSeries(sid)(t) && (t.originalStart ?? t.start) >= at;
+    const shown = this.state.tasks.filter(later);
+    let restore: (() => Promise<void>) | null = null;
     const job = this.changeSeries(
-      (tasks) => tasks.filter((t) => !(this.inSeries(sid)(t) && (t.originalStart ?? t.start) >= at)),
+      (tasks) => tasks.filter((t) => !later(t)),
       async () => {
         const series = await this.fetchSeries(sid);
         if (!series.recurrence) return;
         if (at <= series.start) {
           await this.store.remove(series.id);
           this.seriesCache.delete(series.id);
-          undo = () => void this.create({ ...copyOf(series), recurrence: series.recurrence, extraProps: series.extraProps });
+          restore = () => this.recreateSeries(series);
           return;
         }
         const { before } = splitRule(series.recurrence, series.start, at, series.allDay);
         this.seriesCache.set(series.id, await this.store.update(series, { ...series, recurrence: before }));
-        undo = () =>
-          void this.changeSeries(
-            (tasks) => this.seriesView(tasks, this.inSeries(series.id), series),
-            async () => {
-              const cur = await this.fetchSeries(series.id);
-              this.seriesCache.set(cur.id, await this.store.update(cur, { ...cur, recurrence: series.recurrence }));
-            },
-          );
+        restore = async () => {
+          const cur = await this.fetchSeries(series.id);
+          this.seriesCache.set(cur.id, await this.store.update(cur, { ...cur, recurrence: series.recurrence }));
+        };
       },
     );
-    this.toast(tr('rep.deletedFollowing', { title: occurrence.title }), { label: tr('toast.undo'), run: () => void job.then(() => undo?.()) });
+    this.toast(tr('rep.deletedFollowing', { title: occurrence.title }), {
+      label: tr('toast.undo'),
+      run: () => this.undoSeriesDelete(shown, async () => restore?.()),
+    });
     return job;
   }
 
   /** Deletes every occurrence of the task's series, at once. Undo brings the series back. */
   deleteSeries(occurrence: Task): Promise<void> {
+    if (this.offlineSeries()) return Promise.resolve();
     const sid = occurrence.seriesId ?? occurrence.id;
+    const shown = this.state.tasks.filter(this.inSeries(sid));
     let removed: Task | null = null;
     const job = this.changeSeries(
       (tasks) => tasks.filter((t) => !this.inSeries(sid)(t)),
@@ -747,12 +882,29 @@ export class Planner {
     this.toast(tr('rep.deletedAll', { title: occurrence.title }), {
       label: tr('toast.undo'),
       run: () =>
-        void job.then(() => {
+        this.undoSeriesDelete(shown, async () => {
           const s = removed as Task | null;
-          if (s) void this.create({ ...copyOf(s), recurrence: s.recurrence, extraProps: s.extraProps });
+          if (s) await this.recreateSeries(s);
         }),
     });
     return job;
+  }
+
+  /**
+   * Undoes a series deletion: the occurrences it took off the screen come back at once, and
+   * `restore` puts the series back once the deletion is saved (it does nothing if that failed).
+   */
+  private undoSeriesDelete(shown: Task[], restore: () => Promise<void>) {
+    if (this.offlineSeries()) return;
+    const ids = new Set(shown.map((t) => t.id));
+    void this.changeSeries((tasks) => [...tasks.filter((t) => !ids.has(t.id)), ...shown], restore);
+  }
+
+  /** Creates a deleted series again. Its old id points to the new one, so edits to occurrences shown meanwhile find theirs. */
+  private async recreateSeries(series: Task) {
+    const real = await this.store.create({ ...copyOf(series), recurrence: series.recurrence, extraProps: series.extraProps });
+    this.alias.set(series.id, real.id);
+    this.seriesCache.set(real.id, real);
   }
 
   /** Shows the task at once under a temporary id and saves it in the background. */
@@ -763,6 +915,7 @@ export class Planner {
   }
 
   private async finishCreate(tmpId: string, input: NewTask): Promise<void> {
+    const settle = this.expect(tmpId, { ...input, id: tmpId });
     try {
       const { value: real, latest } = await this.enqueue(tmpId, () =>
         this.sendOrHold({ key: tmpId, base: null, next: { ...input, id: tmpId } }, async () => {
@@ -772,12 +925,14 @@ export class Planner {
           return real;
         }),
       );
-      // Offline: it stays on screen under its temporary id until it's sent.
+      // Offline: it stays on screen under its temporary id until it's sent (the outbox shows it).
+      settle(real ? { task: real } : undefined);
       if (!real) return;
-      const cur = this.state.tasks.find((t) => t.id === tmpId);
+      const cur = this.state.tasks.find((t) => t.id === tmpId || t.id === real.id);
       // If the task was edited while being created, keep those edits (they are queued).
-      this.replace(tmpId, latest || !cur ? real : { ...cur, id: real.id, etag: real.etag });
+      if (cur) this.replace(cur.id, latest ? real : { ...cur, id: real.id, etag: real.etag });
     } catch (e) {
+      settle();
       this.replace(tmpId, null);
       this.fail(e);
     }
@@ -787,16 +942,20 @@ export class Planner {
     const id = this.realId(next.id);
     this.replace(id, { ...next, id });
     const key = this.keyOf(id);
+    const settle = this.expect(key, { ...next, id });
     try {
-      const { value: real, latest } = await this.enqueue(key, () => {
+      const { value: real, latest } = await this.enqueue(key, async () => {
+        await this.fresh(this.realId(key));
         const rid = this.realId(key);
         const base = this.server.get(rid);
         return this.sendOrHold({ key, base: base ?? null, next: { ...next, id: rid } }, () => this.store.update(base ?? { ...next, id: rid }, { ...next, id: rid }));
       });
+      settle(real ? { task: real } : undefined);
       if (!real) return;
       this.server.set(real.id, real);
       if (latest) this.replace(this.realId(id), real);
     } catch (e) {
+      settle();
       const rid = this.realId(id);
       const known = this.server.get(rid);
       if (known) this.replace(rid, known);
@@ -811,16 +970,20 @@ export class Planner {
     if (!before) return;
     this.replace(id, null);
     const key = this.keyOf(id);
+    const settle = this.expect(key, null);
     try {
-      const { value: sent } = await this.enqueue(key, () => {
+      const { value: sent } = await this.enqueue(key, async () => {
+        await this.fresh(this.realId(key));
         const rid = this.realId(key);
         return this.sendOrHold({ key, base: this.server.get(rid) ?? null, next: null }, async () => {
           await this.store.remove(rid);
           return true;
         });
       });
+      settle(sent ? { task: null } : undefined);
       if (sent) this.server.delete(this.realId(key));
     } catch (e) {
+      settle();
       const rid = this.realId(key);
       this.set({ tasks: [...this.state.tasks, this.server.get(rid) ?? { ...before, id: rid }] });
       this.fail(e);
@@ -867,7 +1030,7 @@ export class Planner {
     const from = addDays(range.from, -7);
     let source: Task[];
     try {
-      source = await this.store.list(from, addDays(from, days));
+      source = await this.tasksIn(from, days);
     } catch (e) {
       this.fail(e);
       return;
@@ -969,6 +1132,15 @@ export class Planner {
     });
   }
 
+  /**
+   * Tasks in days that aren't on screen, from the offline copy when it has them (kept current
+   * by `saveShown`), else loaded. For actions that shouldn't wait on Google, not for showing.
+   */
+  private async tasksIn(from: Date, days: number): Promise<Task[]> {
+    const cached = this.state.settings.mode === 'google' ? this.cache.get(from, days) : null;
+    return cached ?? this.store.list(from, addDays(from, days));
+  }
+
   /** Schedules a to-do at the first free time on `day` (see `nextFreeSlot`). */
   async scheduleItemOn(id: string, day: Date) {
     const item = this.state.stack.find((s) => s.id === id);
@@ -978,7 +1150,7 @@ export class Planner {
     let tasks = this.state.tasks;
     if (d < from || d >= addDays(from, days)) {
       try {
-        tasks = await this.store.list(d, addDays(d, 1));
+        tasks = await this.tasksIn(d, 1);
       } catch (e) {
         this.fail(e);
         return;
