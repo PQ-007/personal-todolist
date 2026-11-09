@@ -10,7 +10,7 @@ import { createOutbox, createTaskCache, queueChange, type Outbox, type Pending, 
 import { AuthError, ConflictError, OfflineError, type TaskStore } from '../data/store';
 import { fmtDate, t as tr } from '../i18n';
 import { matchesFilter, type LabelFilter } from '../domain/labels';
-import { splitRule } from '../domain/recurrence';
+import { shiftRule, splitRule } from '../domain/recurrence';
 import { itemFromTask, nextFreeSlot, taskFromItem, type StackItem } from '../domain/stack';
 import { clampSpan, sameRange, stepDay, visibleRange, type DayRange, type View } from '../domain/views';
 import {
@@ -62,6 +62,9 @@ export interface PlannerState {
   /** Changes made offline that haven't reached Google yet. */
   unsent: number;
 }
+
+/** Two RRULE line lists say the same thing, as written. */
+const sameLines = (a: readonly string[] | undefined, b: readonly string[]) => a === b || a?.join('\n') === b.join('\n');
 
 /**
  * Holds what the UI shows and applies every change optimistically: the UI updates at once,
@@ -485,14 +488,16 @@ export class Planner {
   }
 
   /**
-   * Applies an edit to every occurrence: the series keeps its first day and takes the edited
-   * fields, time of day and length. Without a rule the series stops repeating and this
-   * occurrence becomes a plain task. Reloads afterwards, since every occurrence may change.
+   * Applies an edit to every occurrence: the series takes the edited fields, time of day and
+   * length, and moves by as many days as this occurrence did (an unchanged rule moves with it,
+   * see `shiftRule`). Without a rule the series stops repeating and this occurrence becomes a
+   * plain task. Reloads afterwards, since every occurrence may change.
    */
   async updateSeries(occurrence: Task, next: NewTask, recurrence: string[] | undefined) {
     const series = await this.seriesOf(occurrence);
     if (!series) return;
-    const day = startOfDay(series.start);
+    const day = addDays(startOfDay(series.start), dayDiff(occurrence.start, next.start));
+    if (series.recurrence && sameLines(recurrence, series.recurrence)) recurrence = shiftRule(series.recurrence, occurrence.start, next.start);
     const start = next.allDay ? day : withTime(day, next.start.getHours(), next.start.getMinutes());
     const end = next.allDay ? addDays(day, Math.max(1, dayDiff(next.start, next.end))) : new Date(start.getTime() + (next.end.getTime() - next.start.getTime()));
     const { title, description, colorId, label, tags, allDay, reminders } = next;
@@ -522,8 +527,9 @@ export class Planner {
     const at = occurrence.originalStart ?? occurrence.start;
     if (at <= series.start) return this.updateSeries(occurrence, next, recurrence);
     const split = splitRule(series.recurrence, series.start, at, series.allDay);
-    // An unchanged rule continues where the old series stops (a COUNT counts what is left).
-    const rest = recurrence === series.recurrence || recurrence?.join('\n') === series.recurrence.join('\n') ? split.after : recurrence;
+    // An unchanged rule continues where the old series stops (a COUNT counts what is left),
+    // moved to the day this occurrence moved to.
+    const rest = sameLines(recurrence, series.recurrence) ? shiftRule(split.after, occurrence.start, next.start) : recurrence;
     this.set({ sync: 'saving' });
     try {
       await this.store.update(series, { ...series, recurrence: split.before });

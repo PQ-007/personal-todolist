@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { colorOf } from '../domain/colors';
+import { colorVars } from '../domain/colors';
 import { addDays, mondayOf, sameDay, ymd } from '../domain/dates';
 import { streaks, weekReview, type Streak } from '../domain/review';
 import type { Task } from '../domain/types';
@@ -130,7 +130,7 @@ export function ReviewDialog({ onClose }: { onClose: () => void }) {
             {runs.length ? (
               <ul className="rv-streaks">
                 {runs.map((s: Streak) => (
-                  <li key={s.seriesId} style={{ '--c': colorOf(s.colorId) } as CSSProperties} className={s.current ? undefined : 'broken'}>
+                  <li key={s.seriesId} style={colorVars(s.colorId) as CSSProperties} className={s.current ? undefined : 'broken'}>
                     <Icon name="streak" size={16} />
                     <span className="rv-stitle">{s.title}</span>
                     <span className="rv-run">{t('review.inARow', { n: s.current })}</span>

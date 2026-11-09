@@ -1,3 +1,4 @@
+import { copyOf } from '../domain/clipboard';
 import type { Task } from '../domain/types';
 import { t } from '../i18n';
 import { planner } from '../state/planner';
@@ -24,6 +25,23 @@ export function askScope(kind: 'edit' | 'delete', allowThis = true): Promise<Sco
       { id: 'all', label: t('rep.allOfThem') },
     ],
   }) as Promise<Scope | null>;
+}
+
+/**
+ * Saves a task moved or resized on the calendar (`next` is `task` with new times). For a
+ * repeating one, asks whether the move is for this occurrence, this and the following ones, or
+ * all of them; the series keeps its own content and takes only the new times.
+ */
+export async function saveMoved(task: Task, next: Task) {
+  if (!repeats(task)) return planner.update(next);
+  const scope = await askScope('edit');
+  if (scope === 'this') return planner.update(next);
+  if (!scope) return;
+  const series = await planner.seriesOf(task);
+  if (!series?.recurrence) return;
+  const fields = { ...copyOf(series), start: next.start, end: next.end, allDay: next.allDay };
+  if (scope === 'following') await planner.updateFollowing(task, fields, series.recurrence);
+  else await planner.updateSeries(task, fields, series.recurrence);
 }
 
 /** Deletes a task; for a repeating one, after asking whether to delete this one or all of them. */

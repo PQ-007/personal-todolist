@@ -8,7 +8,7 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react';
-import { colorOf } from '../domain/colors';
+import { colorVars } from '../domain/colors';
 import { addDays, addMin, hm, overlapsDay, pad, sameDay, startOfDay, ymd } from '../domain/dates';
 import { fmtDate, fmtDuration, t as tr } from '../i18n';
 import { daySegments, layoutDay, type Placed, type TaskSegment } from '../domain/layout';
@@ -21,7 +21,7 @@ import { isStackDrag, overStack, stackDrag } from './dnd';
 import { useNow } from './hooks';
 import { Icon } from './Icon';
 import { LabelTag } from './LabelTag';
-import { repeats } from './recurring';
+import { repeats, saveMoved } from './recurring';
 
 interface Props {
   /** The consecutive days to show as columns. */
@@ -152,8 +152,8 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
     if (!d.moved) return onOpen(d.task.id);
     if (!d.resizing && overStack(e.clientX, e.clientY)) return planner.unschedule(d.task.id);
     if (d.resizing) {
-      if (d.dMin) void planner.update(resize(d.task, d.dMin));
-    } else if (d.dMin || d.dDay) void planner.update(shift(d.task, d.dDay, d.dMin));
+      if (d.dMin) void saveMoved(d.task, resize(d.task, d.dMin));
+    } else if (d.dMin || d.dDay) void saveMoved(d.task, shift(d.task, d.dDay, d.dMin));
   };
 
   const onPointerCancel = () => {
@@ -272,7 +272,7 @@ export function TimeGrid({ days, onOpen, onCreate }: Props) {
                 type="button"
                 className={'chip' + (t.done ? ' done' : '')}
                 data-id={t.id}
-                style={{ '--c': colorOf(t.colorId) } as CSSProperties}
+                style={colorVars(t.colorId) as CSSProperties}
                 onClick={() => onOpen(t.id)}
               >
                 {t.title}
@@ -339,7 +339,7 @@ function DropPreview({ min, day }: { min: number; day: Date }) {
     <div
       className="drop-preview"
       aria-hidden="true"
-      style={{ '--c': colorOf(item.colorId), top: min * PPM, height: Math.max(item.minutes * PPM - 2, 18) } as CSSProperties}
+      style={{ ...colorVars(item.colorId), top: min * PPM, height: Math.max(item.minutes * PPM - 2, 18) } as CSSProperties}
     >
       <span className="drop-title">{item.title}</span>
       <span className="drop-time">
@@ -371,7 +371,6 @@ export function timeLabel(t: Task): string {
 
 function Card({ seg, drag, ...handlers }: CardProps) {
   const t = seg.task;
-  const c = colorOf(t.colorId);
   const { t: total, d: doneCount } = countTasks(t.description);
   const baseH = Math.max((seg.em - seg.sm) * PPM - 2, 18);
   const h = drag?.resizing ? Math.max(18, baseH + drag.dMin * PPM) : baseH;
@@ -379,7 +378,7 @@ function Card({ seg, drag, ...handlers }: CardProps) {
   const fill = total ? Math.round((doneCount / total) * 100) : 100;
   const label = timeLabel(t);
   const style = {
-    '--c': c,
+    ...colorVars(t.colorId),
     top: seg.sm * PPM,
     height: h,
     left: `calc(${(seg.col / seg.cols) * 100}% + 2px)`,

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
-import { colorOf } from '../domain/colors';
+import { colorVars } from '../domain/colors';
 import { hm, overlapsDay, sameDay, startOfDay, ymd } from '../domain/dates';
 import { matchesFilter } from '../domain/labels';
 import type { Task } from '../domain/types';
@@ -108,7 +108,7 @@ export function MonthView({ onOpen }: { onOpen: (id: string) => void }) {
                 type="button"
                 className={'mchip' + (task.allDay ? ' allday' : '') + (task.done ? ' done' : '')}
                 data-id={task.id}
-                style={{ '--c': colorOf(task.colorId) } as CSSProperties}
+                style={colorVars(task.colorId) as CSSProperties}
                 title={task.title}
                 onClick={() => onOpen(task.id)}
               >

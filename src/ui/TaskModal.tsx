@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { COLORS, COLOR_NAMES, DEFAULT_COLOR } from '../domain/colors';
+import { COLORS, COLOR_NAMES, DEFAULT_COLOR, colorVars } from '../domain/colors';
 import { addMin, parseYmd } from '../domain/dates';
 import { applyDateHint, parseDateHint } from '../domain/dateHint';
 import { moveListItem } from '../domain/markdown/lists';
@@ -304,14 +304,14 @@ export function TaskModal({ target, onClose }: { target: ModalTarget; onClose: (
               </div>
             )}
             <div className="swatches" role="radiogroup" aria-label={tr('modal.color')}>
-              {Object.entries(COLORS).map(([k, c]) => (
+              {Object.keys(COLORS).map((k) => (
                 <button
                   key={k}
                   type="button"
                   role="radio"
                   aria-checked={k === draft.colorId}
                   className={'sw' + (k === draft.colorId ? ' on' : '')}
-                  style={{ '--c': c } as CSSProperties}
+                  style={colorVars(k) as CSSProperties}
                   aria-label={tr(COLOR_NAMES[k]!)}
                   onClick={() => change({ colorId: k })}
                 />

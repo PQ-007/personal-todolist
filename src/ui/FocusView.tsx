@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
-import { colorOf } from '../domain/colors';
+import { colorVars } from '../domain/colors';
 import { addMin, dayDiff, hm, overlapsDay, sameDay } from '../domain/dates';
 import { matchesFilter } from '../domain/labels';
 import { moveListItem } from '../domain/markdown/lists';
@@ -117,7 +117,7 @@ export function FocusView({ onEdit, onMenu, onTaskMenu, onAdd, onReview, compact
               <li
                 key={task.id}
                 className={(task.done ? 'done' : '') + (task.id === expanded ? ' on' : '')}
-                style={{ '--c': colorOf(task.colorId) } as CSSProperties}
+                style={colorVars(task.colorId) as CSSProperties}
                 data-id={task.id}
               >
                 <DoneButton task={task} />
@@ -209,7 +209,7 @@ function TaskCard({ task, now, isToday, onEdit, onTaskMenu, hero, onCollapse }: 
   return (
     <section
       className={'f-card' + (hero ? ' hero' : ' inline') + (running ? ' running' : '') + (overdue ? ' overdue' : '') + (task.done ? ' isdone' : '')}
-      style={{ '--c': colorOf(task.colorId) } as CSSProperties}
+      style={colorVars(task.colorId) as CSSProperties}
       aria-labelledby={titleId}
       data-id={task.id}
     >
@@ -284,7 +284,7 @@ function TaskRow({ task, day, onToggle }: { task: Task; day: Date; onToggle: () 
   return (
     <li
       className={'f-row' + (task.done ? ' done' : '')}
-      style={{ '--c': colorOf(task.colorId) } as CSSProperties}
+      style={colorVars(task.colorId) as CSSProperties}
       data-id={task.id}
       tabIndex={0}
       aria-expanded={false}
@@ -316,7 +316,7 @@ function TodoRow({ item, day, isToday, now, onMenu }: TodoRowProps) {
   return (
     <li
       className="f-row f-todo"
-      style={{ '--c': colorOf(item.colorId) } as CSSProperties}
+      style={colorVars(item.colorId) as CSSProperties}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();

@@ -130,14 +130,14 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .f-bar{height:3px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:14px}
 .f-bar i{display:block;height:100%;background:var(--accent);transition:width .3s ease}
 .f-allday{list-style:none;margin:16px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
-.f-allday li{display:flex;align-items:center;gap:8px;padding:4px 10px 4px 8px;border-radius:99px;background:color-mix(in srgb,var(--c) 14%,var(--panel));font-size:13px}
+.f-allday li{display:flex;align-items:center;gap:8px;padding:4px 10px 4px 8px;border-radius:99px;background:linear-gradient(100deg,color-mix(in srgb,var(--c) 16%,var(--panel)),color-mix(in srgb,var(--c2,var(--c)) 9%,var(--panel)));font-size:13px}
 .f-allday li .donebtn{width:14px;height:14px}
 .f-allday li button:not(.donebtn){border:0;background:transparent;padding:0;font-weight:500}
 .f-allday li.done{opacity:.5;filter:saturate(.2)}
 .f-allday li.done button:not(.donebtn){text-decoration:line-through}
 
 .f-card{position:relative;padding:22px 24px 18px;border-radius:var(--r-lg);background:var(--panel);box-shadow:0 0 0 1px var(--line)}
-.f-card::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:3px;border-radius:0 3px 3px 0;background:var(--c)}
+.f-card::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,var(--c),var(--c2,var(--c)))}
 .f-card-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .f-status{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--c)}
 .f-card.running .f-status{color:var(--accent)}
@@ -159,7 +159,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .f-collapse{width:26px;height:26px}
 .f-allday li.on{box-shadow:inset 0 0 0 1.5px var(--c)}
 .f-time{height:3px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:14px}
-.f-time i{display:block;height:100%;background:var(--c)}
+.f-time i{display:block;height:100%;background:linear-gradient(90deg,var(--c),var(--c2,var(--c)))}
 .f-notes{margin-top:16px;font-size:15px;max-height:46vh;overflow:auto}
 .f-notes .md{padding:0;max-width:none}
 .f-notes .md li.task input{accent-color:var(--c)}
@@ -270,8 +270,8 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .stack-addbtn{margin-left:auto;margin-right:-6px}
 .stack-tags{display:flex;flex-wrap:wrap;gap:4px;padding:0 var(--gutter,16px) 8px}
 .stack-list{list-style:none;margin:0;padding:2px var(--gutter,16px) 12px;overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:4px}
-.scard{position:relative;display:grid;grid-template-columns:12px minmax(0,1fr) auto 26px;align-items:center;gap:6px;padding:8px 2px 8px 6px;border-radius:8px;background:linear-gradient(var(--c),var(--c)) left/3px 100% no-repeat,var(--panel);cursor:grab;user-select:none}
-.scard:hover{background:linear-gradient(var(--c),var(--c)) left/3px 100% no-repeat,var(--hover)}
+.scard{position:relative;display:grid;grid-template-columns:12px minmax(0,1fr) auto 26px;align-items:center;gap:6px;padding:8px 2px 8px 6px;border-radius:8px;background:linear-gradient(var(--c),var(--c2,var(--c))) left/3px 100% no-repeat,linear-gradient(100deg,color-mix(in srgb,var(--c) 10%,var(--panel)),var(--panel) 75%);cursor:grab;user-select:none}
+.scard:hover{background:linear-gradient(var(--c),var(--c2,var(--c))) left/3px 100% no-repeat,linear-gradient(100deg,color-mix(in srgb,var(--c) 14%,var(--hover)),var(--hover) 75%)}
 .scard:active{cursor:grabbing}
 .scard.dragging{opacity:.4}
 .scard.drop-before::before,.scard.drop-after::after{content:"";position:absolute;left:4px;right:4px;height:2px;border-radius:2px;background:var(--accent)}
@@ -318,8 +318,8 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .adlabel,.adcell{position:sticky;top:56px;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);min-height:28px;padding:3px}
 .adlabel{left:0;z-index:7;font-size:10.5px;color:var(--faint);display:flex;align-items:center;justify-content:flex-end;padding-right:8px;white-space:nowrap}
 .adcell{border-left:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
-.chip{display:block;width:100%;text-align:left;border:0;background:color-mix(in srgb,var(--c) 20%,var(--bg));box-shadow:inset 3px 0 0 var(--c);border-radius:4px;padding:1px 7px;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chip:hover{background:color-mix(in srgb,var(--c) 28%,var(--bg))}
+.chip{display:block;width:100%;text-align:left;border:0;background:linear-gradient(100deg,color-mix(in srgb,var(--c) 22%,var(--bg)),color-mix(in srgb,var(--c2,var(--c)) 13%,var(--bg)));box-shadow:inset 3px 0 0 var(--c);border-radius:4px;padding:1px 7px;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--c) 30%,var(--bg)),color-mix(in srgb,var(--c2,var(--c)) 19%,var(--bg)))}
 .chip.done{text-decoration:line-through;opacity:.45;filter:saturate(.15)}
 .times{position:sticky;left:0;z-index:4;background:var(--bg);height:calc(24*var(--hpx))}
 .times span{position:absolute;right:8px;font-size:10.5px;color:var(--faint);font-variant-numeric:tabular-nums;transform:translateY(-50%)}
@@ -335,13 +335,13 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 
 /* event cards */
 /* A card is just its name, centered, with the same space on both sides of the colored edge. */
-.card{position:absolute;z-index:2;overflow:hidden;cursor:pointer;border-radius:6px;padding:4px 10px 4px 13px;display:flex;align-items:center;container-type:size;background:color-mix(in srgb,var(--c) 18%,var(--bg));user-select:none;-webkit-user-select:none}
-.card:hover{background:color-mix(in srgb,var(--c) 26%,var(--bg))}
+.card{position:absolute;z-index:2;overflow:hidden;cursor:pointer;border-radius:6px;padding:4px 10px 4px 13px;display:flex;align-items:center;container-type:size;background:linear-gradient(135deg,color-mix(in srgb,var(--c) 22%,var(--bg)),color-mix(in srgb,var(--c2,var(--c)) 13%,var(--bg)));user-select:none;-webkit-user-select:none}
+.card:hover{background:linear-gradient(135deg,color-mix(in srgb,var(--c) 30%,var(--bg)),color-mix(in srgb,var(--c2,var(--c)) 20%,var(--bg)))}
 .card:focus-visible{outline:2px solid var(--accent);outline-offset:1px;z-index:8}
 .card.dragging{z-index:9;opacity:.92;box-shadow:0 10px 28px rgba(0,0,0,.4);cursor:grabbing;transition:none}
 .card.to-stack{opacity:.5}
 .spine{position:absolute;left:0;top:0;bottom:0;width:3px;background:color-mix(in srgb,var(--c) 35%,transparent)}
-.spine i{display:block;width:100%;background:var(--c)}
+.spine i{display:block;width:100%;background:linear-gradient(180deg,var(--c),var(--c2,var(--c)))}
 /* Cards show just the name; long names wrap on taller cards. */
 /* The name grows with its card (cqh/cqw are % of the card's inner height/width): about 13px for
    a one-hour card, up to 17px in long blocks, held back by width in narrow week columns and
@@ -379,9 +379,9 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .mnum:hover{background:var(--hover)}
 .mcell.today .mnum{background:var(--accent);color:var(--on-accent)}
 .mchip{display:flex;align-items:center;gap:6px;width:100%;min-width:0;border:0;background:transparent;text-align:left;padding:1px 6px;border-radius:5px;font-size:12px;line-height:1.5;color:var(--text)}
-.mchip::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--c)}
+.mchip::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:linear-gradient(135deg,var(--c),var(--c2,var(--c)))}
 .mchip:hover{background:var(--hover)}
-.mchip.allday{background:color-mix(in srgb,var(--c) 20%,var(--bg));font-weight:500}
+.mchip.allday{background:linear-gradient(100deg,color-mix(in srgb,var(--c) 22%,var(--bg)),color-mix(in srgb,var(--c2,var(--c)) 13%,var(--bg)));font-weight:500}
 .mchip.allday::before{display:none}
 .mchip.done{opacity:.45;filter:saturate(.15);text-decoration:line-through}
 .mtime{flex:none;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -401,7 +401,7 @@ dialog::backdrop{background:var(--backdrop);backdrop-filter:blur(2px)}
 .mtodo{min-height:34px}
 .mtodo-hint{font-size:12.5px;color:var(--faint)}
 .swatches{display:flex;gap:7px;flex:1}
-.sw{width:20px;height:20px;border-radius:50%;border:2px solid transparent;background:var(--c);padding:0}
+.sw{width:20px;height:20px;border-radius:50%;border:2px solid transparent;background:linear-gradient(135deg,var(--c),var(--c2,var(--c)));padding:0}
 .sw.on{border-color:var(--text);box-shadow:0 0 0 2px var(--panel) inset}
 .donechk,.mwhen label{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
 .mtitle{width:100%;font-size:21px;font-weight:600;background:transparent;border:0;border-bottom:1px solid var(--line);padding:4px 0 8px;border-radius:0}
@@ -488,8 +488,8 @@ dialog::backdrop{background:var(--backdrop);backdrop-filter:blur(2px)}
 /* task view */
 dialog.tview{width:min(1040px,94vw);min-height:min(600px,86vh);max-height:90vh;overflow:hidden}
 .tv{display:flex;flex-direction:column;flex:1;min-height:0}
-.tv-head{position:relative;padding:16px 18px 26px 40px;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 16%,var(--panel)),var(--panel));border-bottom:1px solid var(--line)}
-.tv-head::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--c)}
+.tv-head{position:relative;padding:16px 18px 26px 40px;background:linear-gradient(160deg,color-mix(in srgb,var(--c) 18%,var(--panel)),color-mix(in srgb,var(--c2,var(--c)) 9%,var(--panel)) 55%,var(--panel));border-bottom:1px solid var(--line)}
+.tv-head::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,var(--c),var(--c2,var(--c)))}
 .tv-bar{display:flex;align-items:center;gap:6px;min-height:36px}
 .tv-bar .iconbtn{width:38px;height:38px}
 .tv-bar .iconbtn .icon{width:19px;height:19px}
@@ -506,7 +506,7 @@ dialog.tview{width:min(1040px,94vw);min-height:min(600px,86vh);max-height:90vh;o
 .tv-progress-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:6px;font-variant-numeric:tabular-nums}
 .pbar{height:5px;border-radius:99px;background:var(--line);overflow:hidden}
 .pbar i{display:block;height:100%;background:var(--accent);transition:width .25s ease}
-.tv-progress .pbar i{background:var(--c)}
+.tv-progress .pbar i{background:linear-gradient(90deg,var(--c),var(--c2,var(--c)))}
 .tv-notes{font-size:17px;line-height:1.7}
 .tv-notes .md{max-width:none;padding:0}
 .tv-notes .md li.task{margin:6px 0}
@@ -610,7 +610,7 @@ dialog.palette{width:min(620px,94vw);margin:12vh auto auto;max-height:70vh;overf
 .ctxsep{height:1px;background:var(--line);margin:4px 6px}
 /* Colors and chips share the menu's width in equal columns, so the rows line up. */
 .ctxswatches{display:grid;grid-template-columns:repeat(var(--n),1fr);justify-items:center;padding:8px 10px}
-.ctxsw{width:20px;height:20px;border-radius:50%;border:0;padding:0;background:var(--c)}
+.ctxsw{width:20px;height:20px;border-radius:50%;border:0;padding:0;background:linear-gradient(135deg,var(--c),var(--c2,var(--c)))}
 .ctxsw:hover{transform:scale(1.12)}
 .ctxsw:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 .ctxsw.on{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--c)}
@@ -690,8 +690,8 @@ dialog.palette{width:min(620px,94vw);margin:12vh auto auto;max-height:70vh;overf
    faint pastels), and a hairline plus soft shadow so white cards stand off the grey sidebars.
    ========================================================================== */
 :root[data-theme="light"] .card,:root[data-theme="light"] .chip,:root[data-theme="light"] .mchip.allday,:root[data-theme="light"] .f-allday li{
-  background:color-mix(in srgb,var(--c) 20%,#fff);color:color-mix(in srgb,var(--c) 42%,#16181d)}
-:root[data-theme="light"] .card:hover,:root[data-theme="light"] .chip:hover{background:color-mix(in srgb,var(--c) 28%,#fff)}
+  background:linear-gradient(120deg,color-mix(in srgb,var(--c) 22%,#fff),color-mix(in srgb,var(--c2,var(--c)) 12%,#fff));color:color-mix(in srgb,var(--c) 42%,#16181d)}
+:root[data-theme="light"] .card:hover,:root[data-theme="light"] .chip:hover{background:linear-gradient(120deg,color-mix(in srgb,var(--c) 30%,#fff),color-mix(in srgb,var(--c2,var(--c)) 18%,#fff))}
 :root[data-theme="light"] .spine{background:color-mix(in srgb,var(--c) 40%,transparent)}
 :root[data-theme="light"] .card.isdone,:root[data-theme="light"] .chip.done{opacity:1;filter:none;background:#fff;color:var(--faint);box-shadow:inset 0 0 0 1px var(--line)}
 :root[data-theme="light"] .card.isdone .spine{background:var(--line2)}
@@ -700,7 +700,7 @@ dialog.palette{width:min(620px,94vw);margin:12vh auto auto;max-height:70vh;overf
 :root[data-theme="light"] .f-card,:root[data-theme="light"] .scard{
   box-shadow:0 0 0 1px var(--line),0 1px 2px rgba(20,24,40,.05)}
 :root[data-theme="light"] .mode.on{box-shadow:0 1px 2px rgba(20,24,40,.12),0 0 0 1px var(--line2)}
-:root[data-theme="light"] .tv-head{background:linear-gradient(180deg,color-mix(in srgb,var(--c) 12%,#fff),#fff)}
+:root[data-theme="light"] .tv-head{background:linear-gradient(160deg,color-mix(in srgb,var(--c) 14%,#fff),color-mix(in srgb,var(--c2,var(--c)) 7%,#fff) 55%,#fff)}
 
 /* ==========================================================================
    Repeating tasks

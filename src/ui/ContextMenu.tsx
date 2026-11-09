@@ -18,7 +18,7 @@ export type MenuEntry =
   /** A row of small buttons, e.g. a number of days. */
   | { kind: 'chips'; label: string; value?: string; options: { id: string; label: string; title?: string }[]; onSelect: (id: string) => void }
   /** A row of color swatches; `options` maps an id to its CSS color and accessible name. */
-  | { kind: 'swatches'; label: string; value: string; options: { id: string; color: string; name: string }[]; onSelect: (id: string) => void };
+  | { kind: 'swatches'; label: string; value: string; options: { id: string; color: string; color2?: string; name: string }[]; onSelect: (id: string) => void };
 
 export interface MenuState {
   x: number;
@@ -136,7 +136,7 @@ export function ContextMenu({ menu, onClose }: { menu: MenuState; onClose: () =>
                   aria-label={o.name}
                   title={o.name}
                   className={'ctxsw' + (o.id === item.value ? ' on' : '')}
-                  style={{ '--c': o.color } as CSSProperties}
+                  style={{ '--c': o.color, '--c2': o.color2 } as CSSProperties}
                   onClick={() => {
                     onClose();
                     item.onSelect(o.id);

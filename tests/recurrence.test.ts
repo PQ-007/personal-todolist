@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hm, ymd } from '../src/domain/dates';
-import { nthOf, occurrences, parseRule, presetOf, presets, ruleLine, sameRepeat, splitRule, type Repeat, withEnd } from '../src/domain/recurrence';
+import { nthOf, occurrences, parseRule, presetOf, presets, ruleLine, sameRepeat, shiftRule, splitRule, type Repeat, withEnd } from '../src/domain/recurrence';
 
 const thu = new Date(2026, 9, 22, 9, 0); // Thursday, Oct 22 2026, 09:00
 const hour = 3600_000;
@@ -117,5 +117,29 @@ describe('splitting a series ("this and following")', () => {
     expect(parseRule(after)!.count).toBe(3);
     expect(parseRule(before)!.count).toBeUndefined();
     expect(withEnd(['RRULE:FREQ=DAILY;COUNT=10'], {}, false)).toEqual(['RRULE:FREQ=DAILY']);
+  });
+});
+
+describe('moving a series to another day', () => {
+  const mon = new Date(2026, 9, 5, 9, 0); // Mon 5 Oct
+  const tue = new Date(2026, 9, 6, 14, 0);
+
+  it('moves weekly days by as many days, wrapping around the week', () => {
+    expect(shiftRule(['RRULE:FREQ=WEEKLY;BYDAY=MO,WE,SU;UNTIL=20261231'], mon, tue)).toEqual(['RRULE:FREQ=WEEKLY;BYDAY=MO,TU,TH;UNTIL=20261231']);
+    expect(shiftRule(['RRULE:FREQ=WEEKLY;BYDAY=MO'], tue, mon)).toEqual(['RRULE:FREQ=WEEKLY;BYDAY=SU']);
+  });
+
+  it('takes the weekday of the month the moved occurrence lands on', () => {
+    expect(shiftRule(['RRULE:FREQ=MONTHLY;BYDAY=1MO', 'EXDATE:20261005T000000Z'], mon, new Date(2026, 9, 30))).toEqual([
+      'RRULE:FREQ=MONTHLY;BYDAY=-1FR',
+      'EXDATE:20261005T000000Z',
+    ]);
+  });
+
+  it('keeps rules that follow the start, rules it cannot edit, and moves within the day', () => {
+    for (const rule of ['RRULE:FREQ=DAILY', 'RRULE:FREQ=WEEKLY', 'RRULE:FREQ=MONTHLY', 'RRULE:FREQ=MONTHLY;BYMONTHDAY=5']) {
+      expect(shiftRule([rule], mon, tue)).toEqual([rule]);
+    }
+    expect(shiftRule(['RRULE:FREQ=WEEKLY;BYDAY=MO'], mon, new Date(2026, 9, 5, 18, 0))).toEqual(['RRULE:FREQ=WEEKLY;BYDAY=MO']);
   });
 });

@@ -1,4 +1,4 @@
-import { addDays, pad, startOfDay } from './dates';
+import { addDays, dayDiff, pad, startOfDay } from './dates';
 
 /**
  * Repeating tasks, stored the way Google Calendar stores them: an RRULE line on the first
@@ -117,6 +117,29 @@ export function splitRule(lines: readonly string[], seriesStart: Date, at: Date,
   // Each occurrence counts as lasting 1 ms, so the first one (starting at `from`) is included.
   const done = occurrences(r, seriesStart, 1, seriesStart, at).length;
   return { before, after: withEnd(lines, { count: Math.max(1, r.count - done) }, allDay) };
+}
+
+/**
+ * The same rule for a series moved from day `from` to day `to`: weekly days move by as many
+ * days, and a monthly "nth weekday" becomes the one `to` falls on, so the occurrences keep
+ * landing where the moved one did. Other rules (and parts this app can't edit) are kept.
+ */
+export function shiftRule(lines: readonly string[], from: Date, to: Date): string[] {
+  const delta = dayDiff(from, to);
+  const r = parseRule(lines);
+  if (!delta || !r || r.unsupported) return [...lines];
+  const move = (d: Weekday) => WEEKDAYS[(((WEEKDAYS.indexOf(d) + delta) % 7) + 7) % 7]!;
+  const byDay = r.byDay?.length
+    ? WEEK_ORDER.filter((d) => r.byDay!.map(move).includes(d)).join(',')
+    : r.nth
+      ? `${nthOf(to)}${weekdayOf(to)}`
+      : null;
+  if (!byDay) return [...lines];
+  return lines.map((line) =>
+    line.toUpperCase().startsWith('RRULE:')
+      ? 'RRULE:' + line.slice(6).split(';').map((p) => (/^BYDAY=/i.test(p) ? `BYDAY=${byDay}` : p)).join(';')
+      : line,
+  );
 }
 
 /** The RRULE line for `r`. All-day series end on a date; timed ones at the end of that day (UTC). */

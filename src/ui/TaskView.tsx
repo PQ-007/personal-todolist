@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { colorOf } from '../domain/colors';
+import { colorVars } from '../domain/colors';
 import { addDays, addMin, hm, sameDay } from '../domain/dates';
 import { moveListItem } from '../domain/markdown/lists';
 import { countTasks, toggleTaskLine } from '../domain/markdown/tasks';
@@ -74,7 +74,7 @@ export function TaskView({ id, onClose, onEdit }: { id: string; onClose: () => v
 
   return (
     <Dialog label={task.title} onRequestClose={onClose} className="tview">
-      <div className={'tv' + (task.done ? ' isdone' : '')} style={{ '--c': colorOf(task.colorId) } as CSSProperties} onKeyDown={onKeyDown}>
+      <div className={'tv' + (task.done ? ' isdone' : '')} style={colorVars(task.colorId) as CSSProperties} onKeyDown={onKeyDown}>
         <header className="tv-head">
           <div className="tv-bar">
             {task.label && <LabelTag label={task.label} />}

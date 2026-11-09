@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
-import { colorOf } from '../domain/colors';
+import { colorVars } from '../domain/colors';
 import { matchesFilter } from '../domain/labels';
 import type { StackItem } from '../domain/stack';
 import { extractTags, formatTags, normalizeTags } from '../domain/tags';
@@ -106,7 +106,7 @@ export function StackPanel({ onMenu, onAdd }: { onMenu: (menu: MenuState) => voi
             <li
               key={item.id}
               className={'scard' + (dropAt === i ? ' drop-before' : '') + (dropAt === i + 1 && i === items.length - 1 ? ' drop-after' : '')}
-              style={{ '--c': colorOf(item.colorId) } as CSSProperties}
+              style={colorVars(item.colorId) as CSSProperties}
               draggable={renaming !== item.id}
               title={t('stack.dragHint')}
               onDragStart={(e) => {

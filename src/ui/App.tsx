@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
-import { COLORS, COLOR_NAMES } from '../domain/colors';
+import { COLORS, COLOR_ENDS, COLOR_NAMES } from '../domain/colors';
 import { addMin, hm, parseYmd, sameDay, withTime } from '../domain/dates';
 import { labelFor, LABELS } from '../domain/labels';
 import type { Task } from '../domain/types';
@@ -86,7 +86,7 @@ export function App() {
       kind: 'swatches',
       label: t('modal.color'),
       value: task.colorId,
-      options: Object.entries(COLORS).map(([id, color]) => ({ id, color, name: t(COLOR_NAMES[id]!) })),
+      options: Object.entries(COLORS).map(([id, color]) => ({ id, color, color2: COLOR_ENDS[id], name: t(COLOR_NAMES[id]!) })),
       onSelect: (colorId) => void planner.patch(task.id, { colorId }),
     },
     { kind: 'separator' },
